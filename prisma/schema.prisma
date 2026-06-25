@@ -1,0 +1,150 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String        @id @default(cuid())
+  name          String?
+  email         String?       @unique
+  emailVerified DateTime?
+  image         String?
+  accounts      Account[]
+  sessions      Session[]
+  gmailAccounts GmailAccount[]
+  settings      UserSettings?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+  user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+model GmailAccount {
+  id                 String      @id @default(cuid())
+  userId             String
+  email              String
+  encryptedRefresh   String
+  encryptedAccess    String?
+  accessExpiresAt    DateTime?
+  historyId          String?
+  lastSyncedAt       DateTime?
+  syncCursorError    String?
+  user               User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  labels             GmailLabel[]
+  messages           GmailMessage[]
+  syncStates         SyncState[]
+  auditLogs          AuditLog[]
+  createdAt          DateTime    @default(now())
+  updatedAt          DateTime    @updatedAt
+
+  @@unique([userId, email])
+}
+
+model GmailLabel {
+  id          String       @id @default(cuid())
+  accountId   String
+  gmailId     String
+  name        String
+  type        String
+  colorJson   String?
+  account     GmailAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  updatedAt   DateTime     @updatedAt
+  createdAt   DateTime     @default(now())
+
+  @@unique([accountId, gmailId])
+}
+
+model GmailMessage {
+  id            String       @id @default(cuid())
+  accountId     String
+  gmailId       String
+  threadId      String
+  subject       String?
+  fromAddress   String?
+  snippet       String?
+  bodyText      String?
+  bodyHtml      String?
+  internalDate  DateTime?
+  isUnread      Boolean      @default(false)
+  isStarred     Boolean      @default(false)
+  labelIdsJson  String       @default("[]")
+  account       GmailAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  @@unique([accountId, gmailId])
+  @@index([accountId, internalDate])
+}
+
+model SyncState {
+  id          String       @id @default(cuid())
+  accountId   String
+  syncType    String
+  status      String
+  startedAt   DateTime     @default(now())
+  completedAt DateTime?
+  detailsJson String?
+  account     GmailAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+}
+
+model AuditLog {
+  id         String       @id @default(cuid())
+  accountId  String
+  action     String
+  targetId   String?
+  metaJson   String?
+  createdAt  DateTime     @default(now())
+  account    GmailAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+}
+
+model UserSettings {
+  id              String   @id @default(cuid())
+  userId          String   @unique
+  displayName     String?
+  signature       String?
+  replyBehavior   String   @default("reply")
+  forwardPrefix   String   @default("Fwd:")
+  autoBcc         String?
+  vacationEnabled Boolean  @default(false)
+  vacationMessage String?
+  settingsJson    String?
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}

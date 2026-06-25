@@ -1,6 +1,6 @@
-# Gmail Organizer Web (SSO)
+# Pigeon Box
 
-Web inbox organizer built on Next.js with Google SSO and Gmail API sync.
+Web inbox built on Next.js with Google SSO and Gmail API sync.
 
 ## Features
 

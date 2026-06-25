@@ -3,8 +3,8 @@ import "./globals.css";
 import { ThemeProvider } from "@/components/theme-provider";
 
 export const metadata: Metadata = {
-  title: "Gmail Organizer",
-  description: "Your own Gmail organization workspace"
+  title: "Pigeon Box",
+  description: "Pigeon Box — your Gmail organization workspace"
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

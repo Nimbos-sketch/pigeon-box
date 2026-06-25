@@ -1,7 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { NoticeBoard } from "@/components/inbox/notice-board";
 import { OVERVIEW_FILTERS, type OverviewFilterId } from "@/lib/overview-filters";
+import type { NoticeType } from "@/server/overview/types";
 
 type OverviewItem = {
   id: string;
@@ -10,6 +12,7 @@ type OverviewItem = {
   source: string;
   receivedAt: string;
   messageId: string;
+  noticeType?: NoticeType;
 };
 
 type OverviewResponse = {
@@ -99,9 +102,14 @@ export function AiOverview({ selectedFilter, onFilterChange, onSelectMessage }: 
       ) : error || items.length === 0 ? (
         <div className="ableton-panel p-5">
           <p className="text-sm text-ableton-muted">
-            {error ?? `No ${activeFilter.label.toLowerCase()} summaries found in recent emails.`}
+            {error ??
+              (selectedFilter === "noticeboard"
+                ? "No business service updates found in recent emails."
+                : `No ${activeFilter.label.toLowerCase()} summaries found in recent emails.`)}
           </p>
         </div>
+      ) : selectedFilter === "noticeboard" ? (
+        <NoticeBoard items={items} generatedBy={generatedBy} onSelectMessage={onSelectMessage} />
       ) : (
         <div className="ableton-panel overflow-hidden">
           <div className="ableton-panel-header flex items-center justify-between">
@@ -111,7 +119,7 @@ export function AiOverview({ selectedFilter, onFilterChange, onSelectMessage }: 
             </span>
           </div>
 
-          <div className="border-b border-ableton-border bg-ableton-canvas p-4">
+          <div className="border-b border-ableton-border bg-ableton-pane p-4">
             <div className="mb-3 flex items-center justify-between gap-3">
               <p className="text-[10px] uppercase tracking-[0.14em] text-ableton-muted">
                 Clip {activeIndex + 1} / {items.length}
@@ -140,7 +148,7 @@ export function AiOverview({ selectedFilter, onFilterChange, onSelectMessage }: 
               onClick={() => onSelectMessage?.(items[activeIndex].messageId)}
             >
               <h2 className="mb-2 text-lg font-semibold leading-snug text-ableton-text">{items[activeIndex].headline}</h2>
-              <p className="mb-3 max-w-4xl text-sm text-ableton-muted">{items[activeIndex].summary}</p>
+              <p className="mb-3 max-w-4xl text-sm text-ableton-subtle">{items[activeIndex].summary}</p>
               <p className="font-mono text-[11px] text-ableton-orange">
                 {items[activeIndex].source} · {new Date(items[activeIndex].receivedAt).toLocaleString()}
               </p>

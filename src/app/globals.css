@@ -10,11 +10,12 @@
   --ableton-pane2: #353535;
   --ableton-border: #454545;
   --ableton-border-light: #5a5a5a;
-  --ableton-text: #e6e6e6;
-  --ableton-muted: #9a9a9a;
+  --ableton-text: #f2f2f2;
+  --ableton-muted: #c2c2c2;
+  --ableton-subtle: #dedede;
   --ableton-orange: #ff764d;
   --ableton-orange-dark: #d85f3c;
-  --ableton-lime: #c6f55c;
+  --ableton-lime: #d4ff7a;
 }
 
 [data-theme="space-grey"] {
@@ -26,6 +27,7 @@
   --ableton-border-light: #a3a3ad;
   --ableton-text: #202027;
   --ableton-muted: #5d5d67;
+  --ableton-subtle: #4a4a54;
   --ableton-orange: #e4633d;
   --ableton-orange-dark: #cc5532;
   --ableton-lime: #4f7f12;
@@ -76,6 +78,15 @@
     letter-spacing: 0.14em;
     text-transform: uppercase;
     color: var(--ableton-muted);
+  }
+
+  .ableton-on-dark {
+    background: var(--ableton-canvas);
+    color: var(--ableton-text);
+  }
+
+  .ableton-on-dark .text-secondary {
+    color: var(--ableton-subtle);
   }
 
   .ableton-chip {
@@ -152,7 +163,7 @@
   .ableton-meter {
     height: 0.25rem;
     width: 100%;
-    background: var(--ableton-canvas);
+    background: var(--ableton-border);
   }
 
   .ableton-meter-fill {

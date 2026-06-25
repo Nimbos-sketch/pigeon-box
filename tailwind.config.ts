@@ -12,11 +12,12 @@ const config: Config = {
           pane2: "#353535",
           border: "#454545",
           borderLight: "#5a5a5a",
-          text: "#e6e6e6",
-          muted: "#9a9a9a",
+          text: "#f2f2f2",
+          muted: "#c2c2c2",
+          subtle: "#dedede",
           orange: "#ff764d",
           orangeDark: "#d85f3c",
-          lime: "#c6f55c",
+          lime: "#d4ff7a",
           blue: "#4db8ff"
         }
       },

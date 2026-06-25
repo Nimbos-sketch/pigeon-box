@@ -8,7 +8,7 @@ export function MailShell({ email, children }: { email: string; children: React.
       <header className="ableton-topbar">
         <div className="flex items-center gap-4">
           <div className="flex h-8 w-8 items-center justify-center border border-ableton-orange bg-ableton-pane2 text-xs font-bold text-ableton-orange">
-            GO
+            PB
           </div>
           <div>
             <p className="text-[10px] uppercase tracking-[0.14em] text-ableton-muted">Live Session</p>

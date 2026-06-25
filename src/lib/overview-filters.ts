@@ -1,4 +1,12 @@
-export type OverviewFilterId = "all" | "news" | "deals" | "newsletters" | "updates" | "finance";
+export type OverviewFilterId =
+  | "all"
+  | "recent48h"
+  | "noticeboard"
+  | "news"
+  | "deals"
+  | "newsletters"
+  | "updates"
+  | "finance";
 
 export type OverviewFilter = {
   id: OverviewFilterId;
@@ -15,6 +23,22 @@ export const OVERVIEW_FILTERS: OverviewFilter[] = [
     description: "Mixed important updates from your inbox",
     keywords: /\b(news|update|alert|deal|sale|newsletter|invoice|order|shipping)\b/i,
     gmailQuery: "in:inbox newer_than:14d"
+  },
+  {
+    id: "recent48h",
+    label: "Last 48 hours",
+    description: "A plain-language recap of everything that arrived in your inbox over the past two days",
+    keywords: /./,
+    gmailQuery: "in:inbox newer_than:2d"
+  },
+  {
+    id: "noticeboard",
+    label: "Notice board",
+    description: "Business service updates, maintenance alerts, billing notices, and account changes",
+    keywords:
+      /\b(service update|maintenance|downtime|outage|incident|scheduled maintenance|product update|policy update|terms of service|security alert|account notice|billing notice|subscription|renewal|api change|platform update|status update|deployment|changelog|system update|vendor|invoice due|payment failed|action required)\b/i,
+    gmailQuery:
+      'in:inbox newer_than:30d (update OR maintenance OR outage OR billing OR subscription OR "service update" OR "policy update" OR "security alert" OR "action required" OR changelog OR deployment)'
   },
   {
     id: "news",

@@ -11,7 +11,7 @@ type ThemeContextValue = {
 };
 
 const ThemeContext = createContext<ThemeContextValue | null>(null);
-const STORAGE_KEY = "gmail-organizer-theme";
+const STORAGE_KEY = "pigeon-box-theme";
 
 function applyTheme(theme: AppTheme) {
   document.documentElement.setAttribute("data-theme", theme);

@@ -1,4 +1,4 @@
-# Gmail Organizer — Full Email Client Architecture
+# Pigeon Box — Full Email Client Architecture
 
 ## Layers
 

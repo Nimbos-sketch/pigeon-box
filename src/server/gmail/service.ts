@@ -17,11 +17,15 @@ function headerValue(
   return hit?.value ?? null;
 }
 
-export async function listInboxMessages(userId: string, params?: { q?: string; pageToken?: string; maxResults?: number }) {
+export async function listInboxMessages(
+  userId: string,
+  params?: { q?: string; labelIds?: string[]; pageToken?: string; maxResults?: number }
+) {
   const { gmail, accountId } = await createGmailClient(userId);
   const response = await gmail.users.messages.list({
     userId: "me",
     q: params?.q,
+    labelIds: params?.labelIds,
     pageToken: params?.pageToken,
     maxResults: params?.maxResults ?? 50
   });
@@ -133,6 +137,25 @@ export async function listLabels(userId: string) {
     )
   );
   return labels;
+}
+
+export async function deleteMessage(userId: string, messageId: string) {
+  const { gmail, accountId } = await createGmailClient(userId);
+  await gmail.users.messages.delete({
+    userId: "me",
+    id: messageId
+  });
+  await db.gmailMessage.deleteMany({
+    where: { accountId, gmailId: messageId }
+  });
+  await db.auditLog.create({
+    data: {
+      accountId,
+      action: "MESSAGE_DELETE",
+      targetId: messageId,
+      metaJson: JSON.stringify({ permanent: true })
+    }
+  });
 }
 
 export async function modifyMessage(

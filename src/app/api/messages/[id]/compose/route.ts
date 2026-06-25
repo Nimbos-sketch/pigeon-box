@@ -1,6 +1,8 @@
 import { z } from "zod";
 import { auth } from "@/lib/auth";
+import { isNsfwEmail } from "@/lib/nsfw-filter";
 import { getComposePrefill } from "@/server/gmail/compose";
+import { getMessageById } from "@/server/gmail/service";
 import { fail, handleApiError, ok } from "@/server/http";
 
 type Params = { params: Promise<{ id: string }> };
@@ -17,6 +19,16 @@ export async function GET(request: Request, { params }: Params) {
 
   try {
     const { id } = await params;
+    const message = await getMessageById(session.user.id, id);
+    if (
+      isNsfwEmail({
+        subject: message.subject,
+        fromAddress: message.fromAddress,
+        snippet: message.snippet
+      })
+    ) {
+      return fail("This message is blocked by the NSFW filter", 403);
+    }
     const prefill = await getComposePrefill(session.user.id, mode, id);
     return ok({ prefill, mode });
   } catch (error) {

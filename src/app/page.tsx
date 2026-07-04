@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { auth, signIn } from "@/lib/auth";
+import { PigeonLogo } from "@/components/brand/pigeon-logo";
 import { ThemeToggle } from "@/components/theme-toggle";
 
 export default async function Home() {
@@ -21,8 +22,13 @@ export default async function Home() {
           }}
           className="ableton-panel p-6"
         >
-          <p className="mb-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-ableton-orange">Session</p>
-          <h1 className="mb-2 text-2xl font-semibold">Pigeon Box</h1>
+          <div className="mb-4 flex items-center gap-3">
+            <PigeonLogo size={48} priority />
+            <div>
+              <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-ableton-orange">Session</p>
+              <h1 className="text-2xl font-semibold">Pigeon Box</h1>
+            </div>
+          </div>
           <p className="mb-6 text-sm text-ableton-muted">
             Sign in with Google to open Pigeon Box.
           </p>

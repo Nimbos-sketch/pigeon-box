@@ -814,24 +814,24 @@ export function InboxClient() {
 
   useEffect(() => {
     if (!mobileDetailMode) {
+      delete document.body.dataset.inboxMobileDetail;
+      delete document.body.dataset.inboxResponse;
       return;
     }
-    document.documentElement.classList.add("overflow-hidden");
-    document.body.classList.add("overflow-hidden");
+    document.body.dataset.inboxMobileDetail = "true";
     if (mobileResponseMode) {
       document.body.dataset.inboxResponse = "true";
     } else {
       delete document.body.dataset.inboxResponse;
     }
     return () => {
-      document.documentElement.classList.remove("overflow-hidden");
-      document.body.classList.remove("overflow-hidden");
+      delete document.body.dataset.inboxMobileDetail;
       delete document.body.dataset.inboxResponse;
     };
   }, [mobileDetailMode, mobileResponseMode]);
 
   return (
-    <div className={`flex min-h-0 flex-1 flex-col ${mobileDetailMode ? "overflow-hidden" : ""}`}>
+    <div className="flex min-h-0 flex-1 flex-col">
       {!mobileDetailMode ? (
       <InboxModuleTabs
         activeId={activeModuleId}
@@ -1011,11 +1011,15 @@ export function InboxClient() {
                 onSpam={() => applyAction("spam", selected.gmailId)}
               />
             ) : (
-              <div className={mobileDetailMode ? "flex h-full min-h-0 flex-col overflow-hidden" : undefined}>
+              <div className={mobileDetailMode ? "flex min-h-0 flex-1 flex-col" : undefined}>
                 {mobileDetailMode ? (
                   <>
                     {mobileResponseMode ? (
-                      <div className="shrink-0 z-10 max-h-[min(40dvh,320px)] overflow-y-auto border-b border-ableton-border bg-ableton-pane px-3 py-2 shadow-[0_4px_12px_rgba(0,0,0,0.25)]">
+                      <div
+                        className={`shrink-0 border-b border-ableton-border bg-ableton-pane px-3 py-2 shadow-[0_4px_12px_rgba(0,0,0,0.25)] ${
+                          dispositionModeForSelected === "action" ? "max-h-[32dvh] overflow-y-auto" : ""
+                        }`}
+                      >
                         {showDispositionFlow && !dispositionModeForSelected ? (
                           <DispositionChooser
                             compact
@@ -1051,9 +1055,9 @@ export function InboxClient() {
                         ) : null}
                       </div>
                     ) : null}
-                    <div className="min-h-0 flex-1 overflow-y-auto px-4 pt-4">
+                    <div className="mobile-message-scroll min-h-0 flex-1 overflow-y-auto overscroll-y-contain px-4 pt-4 pb-[max(1.5rem,env(safe-area-inset-bottom))]">
                       {selected.isPhishingRisk ? <PhishingWarningBanner /> : null}
-                      <h2 className="line-clamp-2 text-lg font-semibold leading-snug">
+                      <h2 className="text-lg font-semibold leading-snug">
                         {selected.subject ?? "(No subject)"}
                       </h2>
                       <p className="mt-1 text-xs text-ableton-muted">{selected.fromAddress ?? "Unknown sender"}</p>
@@ -1064,7 +1068,7 @@ export function InboxClient() {
                         messageId={selected.gmailId}
                         fallbackSnippet={selected.snippet}
                         preferFormatted={mobileResponseMode}
-                        embedded={mobileResponseMode}
+                        embedded
                       />
                     </div>
                     {!mobileResponseMode ? (

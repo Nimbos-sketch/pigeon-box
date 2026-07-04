@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 type MessageDetail = {
   bodyText: string | null;
@@ -31,6 +31,32 @@ export function MessageBodyPanel({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showFormatted, setShowFormatted] = useState(false);
+  const iframeRef = useRef<HTMLIFrameElement>(null);
+
+  const resizeEmbeddedIframe = useCallback((iframe: HTMLIFrameElement) => {
+    const doc = iframe.contentDocument;
+    if (!doc?.body) {
+      return;
+    }
+    const height = Math.max(doc.body.scrollHeight, doc.documentElement?.scrollHeight ?? 0, 320);
+    iframe.style.height = `${height}px`;
+  }, []);
+
+  const wireEmbeddedIframe = useCallback(
+    (iframe: HTMLIFrameElement) => {
+      resizeEmbeddedIframe(iframe);
+      const doc = iframe.contentDocument;
+      if (!doc) {
+        return;
+      }
+      doc.querySelectorAll("img").forEach((img) => {
+        if (!img.complete) {
+          img.addEventListener("load", () => resizeEmbeddedIframe(iframe), { once: true });
+        }
+      });
+    },
+    [resizeEmbeddedIframe]
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -72,12 +98,12 @@ export function MessageBodyPanel({
   const bodyHtml = detail?.bodyHtml?.trim() || null;
   const canShowFormatted = Boolean(bodyHtml);
 
-  function resizeEmbeddedIframe(iframe: HTMLIFrameElement) {
-    const doc = iframe.contentDocument;
-    if (doc?.body) {
-      iframe.style.height = `${Math.max(doc.body.scrollHeight, 320)}px`;
+  useEffect(() => {
+    if (!embedded || !showFormatted || !bodyHtml || !iframeRef.current) {
+      return;
     }
-  }
+    wireEmbeddedIframe(iframeRef.current);
+  }, [embedded, showFormatted, bodyHtml, wireEmbeddedIframe]);
 
   return (
     <div
@@ -127,12 +153,14 @@ export function MessageBodyPanel({
           <p className="whitespace-pre-wrap text-ableton-text">{bodyText || "No message body available."}</p>
         ) : showFormatted && bodyHtml ? (
           <iframe
+            ref={iframeRef}
             title="Email content"
             sandbox=""
-            srcDoc={wrapHtmlDocument(bodyHtml)}
+            scrolling="no"
+            srcDoc={wrapHtmlDocument(bodyHtml, embedded)}
             onLoad={(event) => {
               if (embedded) {
-                resizeEmbeddedIframe(event.currentTarget);
+                wireEmbeddedIframe(event.currentTarget);
               }
             }}
             className={
@@ -149,10 +177,12 @@ export function MessageBodyPanel({
   );
 }
 
-function wrapHtmlDocument(html: string): string {
+function wrapHtmlDocument(html: string, embedded: boolean): string {
+  const overflowRule = embedded ? "html, body { overflow: hidden; }" : "";
   return `<!DOCTYPE html><html><head><meta charset="utf-8"><base target="_blank"><style>
     body { margin: 0; padding: 0; font-family: system-ui, sans-serif; font-size: 14px; line-height: 1.5; color: #111; }
     img { max-width: 100%; height: auto; }
     a { color: #c45a2c; }
+    ${overflowRule}
   </style></head><body>${html}</body></html>`;
 }

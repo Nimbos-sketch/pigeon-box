@@ -280,6 +280,16 @@
   body[data-inbox-response="true"] .mail-app-nav {
     display: none;
   }
+
+  body[data-inbox-mobile-detail="true"] .mail-app-nav {
+    display: none;
+  }
+
+  .mobile-message-scroll {
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-y: contain;
+    touch-action: pan-y;
+  }
 }
 
 @keyframes fadeIn {

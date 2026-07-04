@@ -223,6 +223,14 @@ const MessageCell = memo(function MessageCell({
         <p className="mt-1 text-[9px] font-semibold uppercase tracking-[0.1em] text-ableton-orange">Next</p>
       ) : needsDisposition ? (
         <p className="mt-1 text-[9px] font-semibold uppercase tracking-[0.1em] text-ableton-orange">Action needed</p>
+      ) : message.senderHint ? (
+        <p className="mt-1 truncate text-[9px] text-ableton-muted">
+          {message.senderHint.autoApply
+            ? `Auto ${message.senderHint.preferredAction}`
+            : message.senderHint.preferredAction === "file" && message.senderHint.folderName
+              ? `→ ${message.senderHint.folderName}`
+              : `${message.senderHint.actionsUntilAuto} to auto`}
+        </p>
       ) : message.isPhishingRisk ? (
         <p className="mt-1 text-[9px] font-semibold uppercase text-amber-300">Phishing?</p>
       ) : null}

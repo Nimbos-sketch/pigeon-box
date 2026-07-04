@@ -24,7 +24,7 @@ import { TeamPigeonHoles } from "@/components/inbox/team-pigeon-holes";
 import { TriageSafetyActions } from "@/components/inbox/triage-safety-actions";
 import { formatSenderRuleNotice } from "@/lib/sender-rule-notice";
 import { DEFAULT_FOLDER_COLOR } from "@/lib/folder-colors";
-import type { AutoHandledSummary } from "@/server/sender-rules/service";
+import type { AutoHandledSummary } from "@/lib/sender-rules";
 import type { ActiveDisposition, DispositionMode, QuickReplyTemplate } from "@/lib/inbox-disposition";
 import { countByQueue, type ObligationQueue } from "@/lib/inbox-queues";
 import { findWeekGroupForMessage, groupInboxMessagesByWeek } from "@/lib/inbox-week-groups";
@@ -68,6 +68,8 @@ type Message = {
     preferredAction: string;
     actionsUntilAuto: number;
     autoApply: boolean;
+    folderId?: string | null;
+    folderName?: string | null;
   } | null;
 };
 
@@ -206,6 +208,13 @@ export function InboxClient() {
       : null;
   const mobileDetailMode = !isMdUp && Boolean(selected);
   const mobileResponseMode = mobileDetailMode && Boolean(showDispositionFlow);
+
+  const suggestedFolderId = useMemo(() => {
+    if (!selected?.senderHint || selected.senderHint.preferredAction !== "file") {
+      return null;
+    }
+    return selected.senderHint.folderId ?? null;
+  }, [selected]);
 
   const selectedWeekGroup = useMemo(
     () => findWeekGroupForMessage(weekGroups, selectedId),
@@ -520,7 +529,9 @@ export function InboxClient() {
         }
         return next;
       });
-      setTriageNotice(null);
+      if (!learned) {
+        setTriageNotice(null);
+      }
       setFileTargetFolderId(folderId);
     } catch {
       setMessages(previous);
@@ -663,10 +674,40 @@ export function InboxClient() {
       }
       const data = (await res.json()) as { folder: EmailFolder };
       setFolders((current) =>
-        current.map((folder) => (folder.id === folderId ? data.folder : folder))
+        current.map((folder) =>
+          folder.id === folderId ? { ...data.folder, ruleCount: folder.ruleCount } : folder
+        )
       );
     } catch {
       setError("Could not update folder colour");
+    }
+  }
+
+  async function reloadFolders() {
+    try {
+      const res = await fetch("/api/folders");
+      if (!res.ok) {
+        return;
+      }
+      const data = (await res.json()) as { folders?: EmailFolder[] };
+      setFolders(
+        (data.folders ?? []).map((folder) => ({
+          ...folder,
+          color: folder.color ?? DEFAULT_FOLDER_COLOR
+        }))
+      );
+    } catch {
+      // ignore background refresh errors
+    }
+  }
+
+  function handleFolderDeleted(folderId: string) {
+    setFolders((current) => current.filter((folder) => folder.id !== folderId));
+    if (viewingFolderId === folderId) {
+      handleFolderViewChange(null);
+    }
+    if (fileTargetFolderId === folderId) {
+      setFileTargetFolderId("");
     }
   }
 
@@ -889,6 +930,8 @@ export function InboxClient() {
                 selectModule("folders");
               }}
               onFolderColorChange={handleFolderColorChange}
+              onFolderDeleted={handleFolderDeleted}
+              onRulesChange={() => void reloadFolders()}
             />
           </ModulePanel>
         ) : null}
@@ -994,6 +1037,7 @@ export function InboxClient() {
                         compact
                         folders={folders}
                         filing={filing}
+                        suggestedFolderId={suggestedFolderId}
                         onFile={(folderId) => void fileToFolder(selected.gmailId, folderId)}
                         onArchive={() => void finishDisposition(selected.gmailId, "archive")}
                       />
@@ -1057,6 +1101,7 @@ export function InboxClient() {
                         <FolderBins
                           folders={folders}
                           filing={filing}
+                          suggestedFolderId={suggestedFolderId}
                           onFile={(folderId) => void fileToFolder(selected.gmailId, folderId)}
                           onArchive={() => void finishDisposition(selected.gmailId, "archive")}
                         />

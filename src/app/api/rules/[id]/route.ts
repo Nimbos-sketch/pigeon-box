@@ -1,13 +1,14 @@
 import { z } from "zod";
 import { auth } from "@/lib/auth";
-import { normalizeFolderColor } from "@/lib/folder-colors";
-import { deleteUserFolder, updateUserFolderColor } from "@/server/gmail/folders";
+import { deleteSenderRule, updateSenderRule, type SenderActionType } from "@/server/sender-rules/service";
 import { fail, handleApiError, ok } from "@/server/http";
 
 type Params = { params: Promise<{ id: string }> };
 
 const patchSchema = z.object({
-  color: z.string().regex(/^#[0-9a-fA-F]{6}$/)
+  autoApply: z.boolean().optional(),
+  preferredAction: z.enum(["spam", "trash", "archive", "file"]).optional(),
+  folderId: z.string().nullable().optional()
 });
 
 export async function PATCH(request: Request, { params }: Params) {
@@ -19,11 +20,15 @@ export async function PATCH(request: Request, { params }: Params) {
   try {
     const { id } = await params;
     const json = await request.json();
-    const { color } = patchSchema.parse(json);
-    const folder = await updateUserFolderColor(session.user.id, id, normalizeFolderColor(color));
-    return ok({ folder });
+    const data = patchSchema.parse(json);
+    const rule = await updateSenderRule(session.user.id, id, {
+      autoApply: data.autoApply,
+      preferredAction: data.preferredAction as SenderActionType | undefined,
+      folderId: data.folderId
+    });
+    return ok({ rule });
   } catch (error) {
-    return handleApiError(error, "PATCH /api/folders/[id]");
+    return handleApiError(error, "PATCH /api/rules/[id]");
   }
 }
 
@@ -35,9 +40,9 @@ export async function DELETE(_request: Request, { params }: Params) {
 
   try {
     const { id } = await params;
-    await deleteUserFolder(session.user.id, id);
+    await deleteSenderRule(session.user.id, id);
     return ok({ deleted: true });
   } catch (error) {
-    return handleApiError(error, "DELETE /api/folders/[id]");
+    return handleApiError(error, "DELETE /api/rules/[id]");
   }
 }

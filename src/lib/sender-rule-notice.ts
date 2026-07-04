@@ -1,4 +1,4 @@
-import type { SenderRuleView } from "@/server/sender-rules/service";
+import type { SenderRuleView } from "@/lib/sender-rules";
 
 export function formatSenderRuleNotice(rule: SenderRuleView | null | undefined): string | null {
   if (!rule) {

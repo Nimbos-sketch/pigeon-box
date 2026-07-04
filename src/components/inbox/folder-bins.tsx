@@ -6,9 +6,10 @@ type FolderBinsProps = {
   onArchive: () => void;
   filing: boolean;
   compact?: boolean;
+  suggestedFolderId?: string | null;
 };
 
-export function FolderBins({ folders, onFile, onArchive, filing, compact = false }: FolderBinsProps) {
+export function FolderBins({ folders, onFile, onArchive, filing, compact = false, suggestedFolderId = null }: FolderBinsProps) {
   if (compact) {
     return (
       <div className="border border-ableton-lime/50 bg-ableton-pane2 p-2.5">
@@ -20,7 +21,9 @@ export function FolderBins({ folders, onFile, onArchive, filing, compact = false
                 key={folder.id}
                 type="button"
                 disabled={filing}
-                className="pigeon-cell min-w-[4.75rem] shrink-0 px-1.5 py-1.5 text-center disabled:opacity-60"
+                className={`pigeon-cell min-w-[4.75rem] shrink-0 px-1.5 py-1.5 text-center disabled:opacity-60 ${
+                  folder.id === suggestedFolderId ? "pigeon-cell-selected" : ""
+                }`}
                 onClick={() => onFile(folder.id)}
               >
                 <p className="pigeon-slot-id">F{String(index + 1).padStart(2, "0")}</p>
@@ -54,7 +57,9 @@ export function FolderBins({ folders, onFile, onArchive, filing, compact = false
               key={folder.id}
               type="button"
               disabled={filing}
-              className="pigeon-cell text-center disabled:opacity-60"
+              className={`pigeon-cell text-center disabled:opacity-60 ${
+                folder.id === suggestedFolderId ? "pigeon-cell-selected" : ""
+              }`}
               onClick={() => onFile(folder.id)}
             >
               <p className="pigeon-slot-id">F{String(index + 1).padStart(2, "0")}</p>

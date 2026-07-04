@@ -1,43 +1,19 @@
 import { db } from "@/lib/db";
 import { mapWithConcurrency } from "@/lib/async-pool";
+import {
+  AUTO_APPLY_THRESHOLD,
+  type AutoHandledSummary,
+  type SenderActionType,
+  type SenderHint,
+  type SenderRuleView
+} from "@/lib/sender-rules";
 import { extractSenderKey, formatSenderKeyLabel } from "@/lib/sender-key";
 import { createGmailClient } from "@/server/gmail/client";
 import { fileMessageToFolder } from "@/server/gmail/folders";
 import { modifyMessage } from "@/server/gmail/service";
 
-export const AUTO_APPLY_THRESHOLD = 3;
-
-export type SenderActionType = "spam" | "trash" | "archive" | "file";
-
-export type SenderRuleView = {
-  senderKey: string;
-  senderLabel: string;
-  preferredAction: SenderActionType;
-  folderId: string | null;
-  folderName: string | null;
-  folderColor: string | null;
-  actionCount: number;
-  autoApply: boolean;
-  actionsUntilAuto: number;
-};
-
-export type AutoHandledSummary = {
-  messageId: string;
-  senderKey: string;
-  senderLabel: string;
-  action: SenderActionType;
-  folderName?: string;
-};
-
-export type SenderHint = {
-  senderKey: string;
-  senderLabel: string;
-  preferredAction: SenderActionType;
-  actionCount: number;
-  actionsUntilAuto: number;
-  autoApply: boolean;
-  folderColor: string | null;
-};
+export { AUTO_APPLY_THRESHOLD };
+export type { AutoHandledSummary, SenderActionType, SenderHint, SenderRuleView };
 
 function actionsUntilAuto(actionCount: number, autoApply: boolean): number {
   if (autoApply) {
@@ -47,6 +23,7 @@ function actionsUntilAuto(actionCount: number, autoApply: boolean): number {
 }
 
 function toRuleView(rule: {
+  id: string;
   senderKey: string;
   preferredAction: string;
   folderId: string | null;
@@ -55,6 +32,7 @@ function toRuleView(rule: {
   folder?: { name: string; color: string } | null;
 }): SenderRuleView {
   return {
+    id: rule.id,
     senderKey: rule.senderKey,
     senderLabel: formatSenderKeyLabel(rule.senderKey),
     preferredAction: rule.preferredAction as SenderActionType,
@@ -127,13 +105,78 @@ export async function recordSenderAction(
     data: {
       actionCount: nextCount,
       autoApply,
-      folderId: action === "file" ? folderId ?? existing.folderId : existing.folderId,
+      folderId: action === "file" ? folderId ?? existing.folderId : null,
       lastActionAt: new Date()
     },
     include: { folder: true }
   });
 
   return toRuleView(updated);
+}
+
+export async function updateSenderRule(
+  userId: string,
+  ruleId: string,
+  data: {
+    autoApply?: boolean;
+    preferredAction?: SenderActionType;
+    folderId?: string | null;
+  }
+): Promise<SenderRuleView> {
+  const existing = await db.senderRule.findFirst({
+    where: { id: ruleId, userId },
+    include: { folder: true }
+  });
+  if (!existing) {
+    throw new Error("Rule not found");
+  }
+
+  const preferredAction = data.preferredAction ?? (existing.preferredAction as SenderActionType);
+  let folderId = data.folderId !== undefined ? data.folderId : existing.folderId;
+  if (preferredAction !== "file") {
+    folderId = null;
+  } else if (folderId) {
+    const folder = await db.emailFolder.findFirst({ where: { id: folderId, userId } });
+    if (!folder) {
+      throw new Error("Folder not found");
+    }
+  }
+
+  const updated = await db.senderRule.update({
+    where: { id: ruleId },
+    data: {
+      autoApply: data.autoApply ?? existing.autoApply,
+      preferredAction,
+      folderId,
+      lastActionAt: new Date()
+    },
+    include: { folder: true }
+  });
+
+  return toRuleView(updated);
+}
+
+export async function deleteSenderRule(userId: string, ruleId: string): Promise<void> {
+  const existing = await db.senderRule.findFirst({ where: { id: ruleId, userId } });
+  if (!existing) {
+    throw new Error("Rule not found");
+  }
+  await db.senderRule.delete({ where: { id: ruleId } });
+}
+
+export async function countRulesByFolder(userId: string): Promise<Map<string, number>> {
+  const rows = await db.senderRule.groupBy({
+    by: ["folderId"],
+    where: { userId, folderId: { not: null } },
+    _count: { _all: true }
+  });
+  const map = new Map<string, number>();
+  for (const row of rows) {
+    if (row.folderId) {
+      map.set(row.folderId, row._count._all);
+    }
+  }
+  return map;
 }
 
 async function applyRuleToMessage(
@@ -233,6 +276,8 @@ export function buildSenderHint(
     actionCount: rule.actionCount,
     actionsUntilAuto: rule.actionsUntilAuto,
     autoApply: rule.autoApply,
-    folderColor: rule.folderColor
+    folderColor: rule.folderColor,
+    folderId: rule.folderId,
+    folderName: rule.folderName
   };
 }

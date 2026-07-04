@@ -1,6 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
+import { PigeonLogo } from "@/components/brand/pigeon-logo";
 import { useIsMdUp } from "@/hooks/use-media-query";
 
 type PigeonWorkspaceProps = {
@@ -41,13 +42,17 @@ export function PigeonWorkspace({
             <button type="button" className="ableton-btn shrink-0 px-2 py-1 text-[10px]" onClick={onBackToGrid}>
               ← Grid
             </button>
+            <PigeonLogo size={28} className="shrink-0 rounded border border-ableton-border bg-ableton-pane2 p-0.5" />
             <span className="truncate font-normal normal-case tracking-normal text-ableton-text">
               {workspaceTitle ?? "Message"}
             </span>
           </div>
         ) : (
           <>
-            <span>Pigeon box · grid</span>
+            <div className="flex items-center gap-2">
+              <PigeonLogo size={36} className="rounded border border-ableton-border bg-ableton-pane2 p-0.5" />
+              <span>Pigeon Box · grid</span>
+            </div>
             {hint ? (
               <span className="font-mono text-[10px] font-normal normal-case tracking-normal text-ableton-muted">{hint}</span>
             ) : null}

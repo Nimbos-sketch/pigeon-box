@@ -462,7 +462,7 @@ export function InboxClient() {
         setSelectedId(null);
         setAwaitingDispositionId(null);
       } else if (!isLoadMore) {
-        setSelectedId(nextMessages[0]?.gmailId ?? null);
+        setSelectedId(nextMessages.find((message) => !message.isNsfw)?.gmailId ?? null);
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Unknown inbox error");
@@ -540,8 +540,16 @@ export function InboxClient() {
   }
 
   async function applyAction(action: MessageAction, messageId: string) {
+    const previous = messages;
+    const previousSelectedId = selectedId;
+    const targetMessage = previous.find((msg) => msg.gmailId === messageId);
+    const isBlockedContent = targetMessage?.isNsfw === true;
+    const willRemoveFromView = actionRemovesFromView(action, activeMailbox);
+
     const requiresReadFirst =
-      triageEnabled && (action === "archive" || action === "trash" || action === "spam");
+      triageEnabled &&
+      !isBlockedContent &&
+      (action === "archive" || action === "trash" || action === "spam");
     if (requiresReadFirst && !openedMessageIds.has(messageId)) {
       setTriageNotice("Open this email first, then choose an action.");
       return;
@@ -550,17 +558,25 @@ export function InboxClient() {
     if (
       triageEnabled &&
       (action === "archive" || action === "trash" || action === "spam") &&
-      messageId === awaitingDispositionId
+      (messageId === awaitingDispositionId || isBlockedContent)
     ) {
       markDispositioned(messageId);
       setAwaitingDispositionId(null);
       clearDisposition();
     }
 
-    const previous = messages;
-    const previousSelectedId = selectedId;
-
-    if (action !== "delete_forever") {
+    if (isBlockedContent && willRemoveFromView) {
+      setTriageNotice(null);
+      setMessages((current) => current.filter((msg) => msg.gmailId !== messageId));
+      if (selectedId === messageId) {
+        setSelectedId(null);
+      }
+      setOpenedMessageIds((opened) => {
+        const updated = new Set(opened);
+        updated.delete(messageId);
+        return updated;
+      });
+    } else if (action !== "delete_forever") {
       setMessages((current) =>
         current.map((msg) =>
           msg.gmailId !== messageId
@@ -589,7 +605,7 @@ export function InboxClient() {
         setTriageNotice(learned);
       }
 
-      if (actionRemovesFromView(action, activeMailbox)) {
+      if (willRemoveFromView && !isBlockedContent) {
         setMessages((current) => {
           const next = current.filter((msg) => msg.gmailId !== messageId);
           if (isTriageMailbox(activeMailbox)) {

@@ -789,16 +789,6 @@ export function InboxClient() {
     saveActiveModuleId(id);
   }
 
-  function cycleModule(direction: -1 | 1) {
-    const index = visibleModuleIds.indexOf(activeModuleId);
-    if (index === -1) {
-      selectModule(visibleModuleIds[0] ?? DEFAULT_ACTIVE_MODULE);
-      return;
-    }
-    const nextIndex = (index + direction + visibleModuleIds.length) % visibleModuleIds.length;
-    selectModule(visibleModuleIds[nextIndex] ?? DEFAULT_ACTIVE_MODULE);
-  }
-
   function minimizeActiveModule() {
     if (activeModuleId !== "inbox") {
       selectModule("inbox");
@@ -848,7 +838,6 @@ export function InboxClient() {
         visibleIds={visibleModuleIds}
         summaries={moduleSummaries}
         onSelect={selectModule}
-        onCycle={cycleModule}
         onFocusInbox={() => selectModule("inbox")}
       />
       ) : null}

@@ -13,7 +13,6 @@ type InboxModuleTabsProps = {
   visibleIds: InboxModuleId[];
   summaries: ModuleTabSummary;
   onSelect: (id: InboxModuleId) => void;
-  onCycle: (direction: -1 | 1) => void;
   onFocusInbox: () => void;
 };
 
@@ -22,7 +21,6 @@ export function InboxModuleTabs({
   visibleIds,
   summaries,
   onSelect,
-  onCycle,
   onFocusInbox
 }: InboxModuleTabsProps) {
   const activeIndex = visibleIds.indexOf(activeId);
@@ -33,26 +31,6 @@ export function InboxModuleTabs({
     <div className="border-b border-ableton-border bg-ableton-pane2">
       <div className="mx-auto flex max-w-7xl flex-wrap items-center gap-2 px-4 py-2">
         <p className="mr-1 hidden text-[10px] uppercase tracking-[0.14em] text-ableton-muted sm:block">Panels</p>
-        <div className="flex items-center gap-1">
-          <button
-            type="button"
-            className="ableton-btn px-2 py-1 text-xs"
-            aria-label="Previous panel"
-            disabled={visibleIds.length <= 1}
-            onClick={() => onCycle(-1)}
-          >
-            ◀
-          </button>
-          <button
-            type="button"
-            className="ableton-btn px-2 py-1 text-xs"
-            aria-label="Next panel"
-            disabled={visibleIds.length <= 1}
-            onClick={() => onCycle(1)}
-          >
-            ▶
-          </button>
-        </div>
 
         <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto">
           {MODULE_TAB_ORDER.filter((id) => visibleIds.includes(id)).map((id) => {

@@ -1011,14 +1011,47 @@ export function InboxClient() {
                 onSpam={() => applyAction("spam", selected.gmailId)}
               />
             ) : (
-              <div className={mobileDetailMode ? "relative flex h-full min-h-0 flex-col overflow-hidden" : undefined}>
+              <div className={mobileDetailMode ? "flex h-full min-h-0 flex-col overflow-hidden" : undefined}>
                 {mobileDetailMode ? (
                   <>
-                    <div
-                      className={`min-h-0 flex-1 overflow-y-auto px-4 pt-4 ${
-                        mobileResponseMode ? "pb-[min(44dvh,360px)]" : ""
-                      }`}
-                    >
+                    {mobileResponseMode ? (
+                      <div className="shrink-0 z-10 max-h-[min(40dvh,320px)] overflow-y-auto border-b border-ableton-border bg-ableton-pane px-3 py-2 shadow-[0_4px_12px_rgba(0,0,0,0.25)]">
+                        {showDispositionFlow && !dispositionModeForSelected ? (
+                          <DispositionChooser
+                            compact
+                            suggestedQueue={selected.obligationQueue ?? "action"}
+                            onChoose={handleChooseDisposition}
+                          />
+                        ) : null}
+                        {showDispositionFlow && dispositionModeForSelected === "action" ? (
+                          <FolderBins
+                            compact
+                            folders={folders}
+                            filing={filing}
+                            suggestedFolderId={suggestedFolderId}
+                            onFile={(folderId) => void fileToFolder(selected.gmailId, folderId)}
+                            onArchive={() => void finishDisposition(selected.gmailId, "archive")}
+                          />
+                        ) : null}
+                        {showDispositionFlow && dispositionModeForSelected === "respond" ? (
+                          <RespondPanel
+                            compact
+                            messageId={selected.gmailId}
+                            sending={sendingQuickReply}
+                            onQuickReply={(template) => void handleQuickReply(template)}
+                            onArchiveAfterReply={() => void finishDisposition(selected.gmailId, "archive")}
+                          />
+                        ) : null}
+                        {triageEnabled ? (
+                          <TriageSafetyActions
+                            compact
+                            onTrash={() => applyAction("trash", selected.gmailId)}
+                            onSpam={() => applyAction("spam", selected.gmailId)}
+                          />
+                        ) : null}
+                      </div>
+                    ) : null}
+                    <div className="min-h-0 flex-1 overflow-y-auto px-4 pt-4">
                       {selected.isPhishingRisk ? <PhishingWarningBanner /> : null}
                       <h2 className="line-clamp-2 text-lg font-semibold leading-snug">
                         {selected.subject ?? "(No subject)"}
@@ -1034,88 +1067,52 @@ export function InboxClient() {
                         embedded={mobileResponseMode}
                       />
                     </div>
-                    <div
-                      className={
-                        mobileResponseMode
-                          ? "absolute inset-x-0 bottom-0 z-10 max-h-[min(44dvh,360px)] overflow-y-auto border-t border-ableton-border bg-ableton-pane/92 px-3 py-2 shadow-[0_-10px_28px_rgba(0,0,0,0.5)] backdrop-blur-md"
-                          : "shrink-0 border-t border-ableton-border bg-ableton-pane px-3 py-2 shadow-[0_-4px_12px_rgba(0,0,0,0.25)]"
-                      }
-                    >
-                      {showDispositionFlow && !dispositionModeForSelected ? (
-                        <DispositionChooser
-                          compact
-                          suggestedQueue={selected.obligationQueue ?? "action"}
-                          onChoose={handleChooseDisposition}
-                        />
-                      ) : null}
-                      {showDispositionFlow && dispositionModeForSelected === "action" ? (
-                        <FolderBins
-                          compact
-                          folders={folders}
-                          filing={filing}
-                          suggestedFolderId={suggestedFolderId}
-                          onFile={(folderId) => void fileToFolder(selected.gmailId, folderId)}
-                          onArchive={() => void finishDisposition(selected.gmailId, "archive")}
-                        />
-                      ) : null}
-                      {showDispositionFlow && dispositionModeForSelected === "respond" ? (
-                        <RespondPanel
-                          compact
-                          messageId={selected.gmailId}
-                          sending={sendingQuickReply}
-                          onQuickReply={(template) => void handleQuickReply(template)}
-                          onArchiveAfterReply={() => void finishDisposition(selected.gmailId, "archive")}
-                        />
-                      ) : null}
-                      {!showDispositionFlow && !triageEnabled && !viewingFolderId ? (
-                        <FileToFolder
-                          folders={folders}
-                          selectedFolderId={fileTargetFolderId}
-                          onFolderSelect={setFileTargetFolderId}
-                          onFile={() => void fileToFolder(selected.gmailId, fileTargetFolderId)}
-                          canFile={canFileSelected}
-                          filing={filing}
-                          required={false}
-                        />
-                      ) : null}
-                      {!showDispositionFlow ? (
-                        <div className="mt-2 flex flex-wrap gap-2">
-                          {!triageEnabled && activeMailbox !== "DRAFT" && activeMailbox !== "SENT" ? (
-                            <>
-                              <a className="ableton-btn text-xs" href={`/compose?mode=reply&id=${selected.gmailId}`}>
-                                Reply
-                              </a>
-                              <a className="ableton-btn text-xs" href={`/compose?mode=forward&id=${selected.gmailId}`}>
-                                Forward
-                              </a>
-                            </>
-                          ) : null}
-                          {triageEnabled ? (
-                            <TriageSafetyActions
-                              compact
-                              onTrash={() => applyAction("trash", selected.gmailId)}
-                              onSpam={() => applyAction("spam", selected.gmailId)}
-                            />
-                          ) : (
-                            visibleMailboxActions.map((action) => (
-                              <button
-                                key={action}
-                                className={`ableton-btn text-xs ${action === "delete_forever" ? "border-red-800 text-red-300" : ""}`}
-                                onClick={() => applyAction(action, selected.gmailId)}
-                              >
-                                {ACTION_LABELS[action]}
-                              </button>
-                            ))
-                          )}
-                        </div>
-                      ) : triageEnabled ? (
-                        <TriageSafetyActions
-                          compact
-                          onTrash={() => applyAction("trash", selected.gmailId)}
-                          onSpam={() => applyAction("spam", selected.gmailId)}
-                        />
-                      ) : null}
-                    </div>
+                    {!mobileResponseMode ? (
+                      <div className="shrink-0 border-t border-ableton-border bg-ableton-pane px-3 py-2 shadow-[0_-4px_12px_rgba(0,0,0,0.25)]">
+                        {!showDispositionFlow && !triageEnabled && !viewingFolderId ? (
+                          <FileToFolder
+                            folders={folders}
+                            selectedFolderId={fileTargetFolderId}
+                            onFolderSelect={setFileTargetFolderId}
+                            onFile={() => void fileToFolder(selected.gmailId, fileTargetFolderId)}
+                            canFile={canFileSelected}
+                            filing={filing}
+                            required={false}
+                          />
+                        ) : null}
+                        {!showDispositionFlow ? (
+                          <div className="mt-2 flex flex-wrap gap-2">
+                            {!triageEnabled && activeMailbox !== "DRAFT" && activeMailbox !== "SENT" ? (
+                              <>
+                                <a className="ableton-btn text-xs" href={`/compose?mode=reply&id=${selected.gmailId}`}>
+                                  Reply
+                                </a>
+                                <a className="ableton-btn text-xs" href={`/compose?mode=forward&id=${selected.gmailId}`}>
+                                  Forward
+                                </a>
+                              </>
+                            ) : null}
+                            {triageEnabled ? (
+                              <TriageSafetyActions
+                                compact
+                                onTrash={() => applyAction("trash", selected.gmailId)}
+                                onSpam={() => applyAction("spam", selected.gmailId)}
+                              />
+                            ) : (
+                              visibleMailboxActions.map((action) => (
+                                <button
+                                  key={action}
+                                  className={`ableton-btn text-xs ${action === "delete_forever" ? "border-red-800 text-red-300" : ""}`}
+                                  onClick={() => applyAction(action, selected.gmailId)}
+                                >
+                                  {ACTION_LABELS[action]}
+                                </button>
+                              ))
+                            )}
+                          </div>
+                        ) : null}
+                      </div>
+                    ) : null}
                   </>
                 ) : (
                   <>

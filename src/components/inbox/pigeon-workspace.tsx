@@ -14,6 +14,8 @@ type PigeonWorkspaceProps = {
   workspaceTitle?: string;
   /** Tighter mobile chrome when disposition panels should fill the screen. */
   compactChrome?: boolean;
+  /** Hide the mobile back/title bar (e.g. email full-screen reading). */
+  hideMobileHeader?: boolean;
 };
 
 export function PigeonWorkspace({
@@ -23,7 +25,8 @@ export function PigeonWorkspace({
   showWorkspaceOnMobile = false,
   onBackToGrid,
   workspaceTitle,
-  compactChrome = false
+  compactChrome = false,
+  hideMobileHeader = false
 }: PigeonWorkspaceProps) {
   const isMdUp = useIsMdUp();
   const mobileDetail = !isMdUp && showWorkspaceOnMobile;
@@ -35,7 +38,7 @@ export function PigeonWorkspace({
       <div
         className={`ableton-panel-header flex flex-wrap items-center justify-between gap-2 border-b border-ableton-border ${
           compactChrome ? "py-1" : ""
-        }`}
+        } ${hideMobileHeader ? "hidden" : ""}`}
       >
         {mobileDetail ? (
           <div className="flex min-w-0 flex-1 items-center gap-2">

@@ -131,6 +131,7 @@ export function InboxClient() {
   const [sendingQuickReply, setSendingQuickReply] = useState(false);
   const [autoHandled, setAutoHandled] = useState<AutoHandledSummary[]>([]);
   const [activeModuleId, setActiveModuleId] = useState<InboxModuleId>(DEFAULT_ACTIVE_MODULE);
+  const [mobileEmailFullscreen, setMobileEmailFullscreen] = useState(false);
 
   const triageEnabled = isTriageMailbox(activeMailbox) && viewingFolderId === null;
   const activeDispositionId = activeDisposition?.messageId ?? null;
@@ -328,6 +329,7 @@ export function InboxClient() {
   function handleBackToGrid() {
     setSelectedId(null);
     setAwaitingDispositionId(null);
+    setMobileEmailFullscreen(false);
   }
 
   function handleSelectMessage(messageId: string) {
@@ -813,9 +815,14 @@ export function InboxClient() {
   }, [selected]);
 
   useEffect(() => {
+    setMobileEmailFullscreen(false);
+  }, [selectedId, mobileResponseMode]);
+
+  useEffect(() => {
     if (!mobileDetailMode) {
       delete document.body.dataset.inboxMobileDetail;
       delete document.body.dataset.inboxResponse;
+      delete document.body.dataset.inboxEmailFullscreen;
       return;
     }
     document.body.dataset.inboxMobileDetail = "true";
@@ -824,11 +831,17 @@ export function InboxClient() {
     } else {
       delete document.body.dataset.inboxResponse;
     }
+    if (mobileEmailFullscreen) {
+      document.body.dataset.inboxEmailFullscreen = "true";
+    } else {
+      delete document.body.dataset.inboxEmailFullscreen;
+    }
     return () => {
       delete document.body.dataset.inboxMobileDetail;
       delete document.body.dataset.inboxResponse;
+      delete document.body.dataset.inboxEmailFullscreen;
     };
-  }, [mobileDetailMode, mobileResponseMode]);
+  }, [mobileDetailMode, mobileResponseMode, mobileEmailFullscreen]);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -959,6 +972,7 @@ export function InboxClient() {
       <PigeonWorkspace
         showWorkspaceOnMobile={Boolean(selected)}
         compactChrome={mobileResponseMode}
+        hideMobileHeader={mobileEmailFullscreen && mobileResponseMode}
         onBackToGrid={handleBackToGrid}
         workspaceTitle={selected?.subject ?? undefined}
         hint={
@@ -1013,6 +1027,36 @@ export function InboxClient() {
             ) : (
               <div className={mobileDetailMode ? "flex min-h-0 flex-1 flex-col" : undefined}>
                 {mobileDetailMode ? (
+                  mobileResponseMode && mobileEmailFullscreen ? (
+                    <div className="flex min-h-0 flex-1 flex-col">
+                      <div className="shrink-0 flex items-center gap-2 border-b border-ableton-border bg-ableton-pane px-3 py-2.5 shadow-[0_2px_10px_rgba(0,0,0,0.2)]">
+                        <button
+                          type="button"
+                          className="ableton-btn ableton-btn-primary shrink-0 px-3 py-2 text-[11px]"
+                          onClick={() => setMobileEmailFullscreen(false)}
+                        >
+                          ← Disposition
+                        </button>
+                        <span className="min-w-0 truncate text-xs text-ableton-muted">
+                          {selected.fromAddress ?? "Unknown sender"}
+                        </span>
+                      </div>
+                      <div className="mobile-message-scroll min-h-0 flex-1 overflow-y-auto overscroll-y-contain px-4 pt-4 pb-[max(1.5rem,env(safe-area-inset-bottom))]">
+                        {selected.isPhishingRisk ? <PhishingWarningBanner /> : null}
+                        <h2 className="text-lg font-semibold leading-snug">{selected.subject ?? "(No subject)"}</h2>
+                        <p className="mt-1 text-xs text-ableton-muted">{selected.fromAddress ?? "Unknown sender"}</p>
+                        <p className="mb-3 font-mono text-[10px] text-ableton-orange">
+                          {selected.internalDate ? new Date(selected.internalDate).toLocaleString() : "No timestamp"}
+                        </p>
+                        <MessageBodyPanel
+                          messageId={selected.gmailId}
+                          fallbackSnippet={selected.snippet}
+                          preferFormatted
+                          embedded
+                        />
+                      </div>
+                    </div>
+                  ) : (
                   <>
                     {mobileResponseMode ? (
                       <div
@@ -1053,6 +1097,13 @@ export function InboxClient() {
                             onSpam={() => applyAction("spam", selected.gmailId)}
                           />
                         ) : null}
+                        <button
+                          type="button"
+                          className="ableton-btn mt-2 w-full py-2 text-[11px]"
+                          onClick={() => setMobileEmailFullscreen(true)}
+                        >
+                          Read email full screen
+                        </button>
                       </div>
                     ) : null}
                     <div className="mobile-message-scroll min-h-0 flex-1 overflow-y-auto overscroll-y-contain px-4 pt-4 pb-[max(1.5rem,env(safe-area-inset-bottom))]">
@@ -1118,6 +1169,7 @@ export function InboxClient() {
                       </div>
                     ) : null}
                   </>
+                  )
                 ) : (
                   <>
                     <div>

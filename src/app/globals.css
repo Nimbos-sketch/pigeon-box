@@ -285,6 +285,10 @@
     display: none;
   }
 
+  body[data-inbox-email-fullscreen="true"] .ableton-topbar {
+    display: none;
+  }
+
   .mobile-message-scroll {
     -webkit-overflow-scrolling: touch;
     overscroll-behavior-y: contain;

@@ -1,4 +1,5 @@
 import { db } from "@/lib/db";
+import { mapWithConcurrency } from "@/lib/async-pool";
 import { extractBodiesFromPayload } from "@/server/gmail/body";
 import { createGmailClient } from "@/server/gmail/client";
 
@@ -31,52 +32,58 @@ export async function listInboxMessages(
     maxResults: params?.maxResults ?? 50
   });
   const summaries = (response.data.messages ?? []) as MessageSummary[];
-  const rows = await Promise.all(
-    summaries.map(async (message) => {
-      const detail = await gmail.users.messages.get({
-        userId: "me",
-        id: message.id,
-        format: "full"
-      });
-      const data = detail.data;
-      const subject = headerValue(data.payload?.headers, "subject");
-      const from = headerValue(data.payload?.headers, "from");
-      const internalDate = data.internalDate ? new Date(Number(data.internalDate)) : null;
-      const labels = data.labelIds ?? [];
-      const record = await db.gmailMessage.upsert({
-        where: { accountId_gmailId: { accountId, gmailId: message.id } },
-        update: {
-          threadId: data.threadId ?? message.threadId,
-          subject,
-          fromAddress: from,
-          snippet: data.snippet,
-          internalDate,
-          isUnread: labels.includes("UNREAD"),
-          isStarred: labels.includes("STARRED"),
-          labelIdsJson: JSON.stringify(labels)
-        },
-        create: {
-          accountId,
-          gmailId: message.id,
-          threadId: data.threadId ?? message.threadId,
-          subject,
-          fromAddress: from,
-          snippet: data.snippet,
-          internalDate,
-          isUnread: labels.includes("UNREAD"),
-          isStarred: labels.includes("STARRED"),
-          labelIdsJson: JSON.stringify(labels)
-        }
-      });
-      return record;
-    })
-  );
+  const rows = await mapWithConcurrency(summaries, 8, async (message) => {
+    const detail = await gmail.users.messages.get({
+      userId: "me",
+      id: message.id,
+      format: "metadata",
+      metadataHeaders: ["Subject", "From"]
+    });
+    const data = detail.data;
+    const subject = headerValue(data.payload?.headers, "subject");
+    const from = headerValue(data.payload?.headers, "from");
+    const internalDate = data.internalDate ? new Date(Number(data.internalDate)) : null;
+    const labels = data.labelIds ?? [];
+    const record = await db.gmailMessage.upsert({
+      where: { accountId_gmailId: { accountId, gmailId: message.id } },
+      update: {
+        threadId: data.threadId ?? message.threadId,
+        subject,
+        fromAddress: from,
+        snippet: data.snippet,
+        internalDate,
+        isUnread: labels.includes("UNREAD"),
+        isStarred: labels.includes("STARRED"),
+        labelIdsJson: JSON.stringify(labels)
+      },
+      create: {
+        accountId,
+        gmailId: message.id,
+        threadId: data.threadId ?? message.threadId,
+        subject,
+        fromAddress: from,
+        snippet: data.snippet,
+        internalDate,
+        isUnread: labels.includes("UNREAD"),
+        isStarred: labels.includes("STARRED"),
+        labelIdsJson: JSON.stringify(labels)
+      }
+    });
+    return record;
+  });
 
   return { messages: rows, nextPageToken: response.data.nextPageToken ?? null, resultSizeEstimate: response.data.resultSizeEstimate ?? 0 };
 }
 
 export async function getMessageById(userId: string, messageId: string) {
   const { gmail, accountId } = await createGmailClient(userId);
+  const cached = await db.gmailMessage.findUnique({
+    where: { accountId_gmailId: { accountId, gmailId: messageId } }
+  });
+  if (cached?.bodyText) {
+    return cached;
+  }
+
   const detail = await gmail.users.messages.get({
     userId: "me",
     id: messageId,

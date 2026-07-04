@@ -21,6 +21,7 @@ import { WeekInboxDigest } from "@/components/inbox/week-inbox-digest";
 import { WeekProgress } from "@/components/inbox/week-progress";
 import { SmartHandlingBanner } from "@/components/inbox/smart-handling-banner";
 import { TeamPigeonHoles } from "@/components/inbox/team-pigeon-holes";
+import { TriageSafetyActions } from "@/components/inbox/triage-safety-actions";
 import { formatSenderRuleNotice } from "@/lib/sender-rule-notice";
 import { DEFAULT_FOLDER_COLOR } from "@/lib/folder-colors";
 import type { AutoHandledSummary } from "@/server/sender-rules/service";
@@ -70,11 +71,6 @@ type Message = {
   } | null;
 };
 
-type Label = {
-  id: string;
-  name: string;
-};
-
 type LoadInboxOptions = {
   pageToken?: string;
   query?: string;
@@ -110,7 +106,6 @@ export function InboxClient() {
   const searchParams = useSearchParams();
   const isMdUp = useIsMdUp();
   const [messages, setMessages] = useState<Message[]>([]);
-  const [labels, setLabels] = useState<Label[]>([]);
   const [folders, setFolders] = useState<EmailFolder[]>([]);
   const [viewingFolderId, setViewingFolderId] = useState<string | null>(null);
   const [fileTargetFolderId, setFileTargetFolderId] = useState("");
@@ -407,6 +402,7 @@ export function InboxClient() {
     }
     setError(null);
     try {
+      const foldersPromise = !isLoadMore ? fetch("/api/folders") : null;
       const messagesRes = await fetch(buildInboxUrl(options));
       if (!messagesRes.ok) {
         const body = (await messagesRes.json().catch(() => null)) as { error?: string } | null;
@@ -438,26 +434,19 @@ export function InboxClient() {
         setTriageNotice(null);
         setActiveDisposition(null);
 
-        const [labelsRes, foldersRes] = await Promise.all([
-          fetch("/api/labels"),
-          fetch("/api/folders")
-        ]);
-
-        if (labelsRes.ok) {
-          const labelsJson = await labelsRes.json();
-          setLabels(labelsJson.labels ?? []);
-        }
-
-        if (foldersRes.ok) {
-          const foldersJson = await foldersRes.json();
-          setFolders(
-            (foldersJson.folders ?? []).map((folder: EmailFolder) => ({
-              ...folder,
-              color: folder.color ?? DEFAULT_FOLDER_COLOR
-            }))
-          );
-        } else {
-          setFolders([]);
+        if (foldersPromise) {
+          const foldersRes = await foldersPromise;
+          if (foldersRes.ok) {
+            const foldersJson = await foldersRes.json();
+            setFolders(
+              (foldersJson.folders ?? []).map((folder: EmailFolder) => ({
+                ...folder,
+                color: folder.color ?? DEFAULT_FOLDER_COLOR
+              }))
+            );
+          } else {
+            setFolders([]);
+          }
         }
       }
 
@@ -1018,6 +1007,13 @@ export function InboxClient() {
                         onArchiveAfterReply={() => void finishDisposition(selected.gmailId, "archive")}
                       />
                     ) : null}
+                    {triageEnabled ? (
+                      <TriageSafetyActions
+                        compact
+                        onTrash={() => applyAction("trash", selected.gmailId)}
+                        onSpam={() => applyAction("spam", selected.gmailId)}
+                      />
+                    ) : null}
                   </div>
                 ) : (
                   <>
@@ -1111,22 +1107,10 @@ export function InboxClient() {
                             </button>
                           ))
                         ) : (
-                          <>
-                            <button
-                              type="button"
-                              className="ableton-btn border-red-800 text-red-300"
-                              onClick={() => applyAction("trash", selected.gmailId)}
-                            >
-                              Trash
-                            </button>
-                            <button
-                              type="button"
-                              className="ableton-btn border-red-800 text-red-300"
-                              onClick={() => applyAction("spam", selected.gmailId)}
-                            >
-                              Spam
-                            </button>
-                          </>
+                          <TriageSafetyActions
+                            onTrash={() => applyAction("trash", selected.gmailId)}
+                            onSpam={() => applyAction("spam", selected.gmailId)}
+                          />
                         )}
                         {triageEnabled && showDispositionFlow && !dispositionModeForSelected && isMdUp ? (
                           <p className="w-full text-xs text-ableton-muted">Choose Respond, Action, or FYI to continue.</p>

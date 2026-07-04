@@ -1,6 +1,6 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { memo, type ReactNode } from "react";
 import type { InboxWeekGroup } from "@/lib/inbox-week-groups";
 import type { ObligationQueue } from "@/lib/inbox-queues";
 import { padGridCells } from "@/lib/pigeon-grid";
@@ -138,7 +138,7 @@ export function WeekGroupedMessageList({
   );
 }
 
-function NsfwMessageCell({
+const NsfwMessageCell = memo(function NsfwMessageCell({
   slot,
   message,
   onTrash,
@@ -164,9 +164,9 @@ function NsfwMessageCell({
       </div>
     </div>
   );
-}
+});
 
-function MessageCell({
+const MessageCell = memo(function MessageCell({
   slot,
   message,
   isSelected,
@@ -228,4 +228,4 @@ function MessageCell({
       ) : null}
     </button>
   );
-}
+});

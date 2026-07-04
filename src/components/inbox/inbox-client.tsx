@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { AiOverview } from "@/components/inbox/ai-overview";
 import { InboxModuleTabs } from "@/components/inbox/inbox-module-tabs";
+import { MessageBodyPanel } from "@/components/inbox/message-body-panel";
 import { ModulePanel } from "@/components/inbox/module-panel";
 import { DispositionChooser } from "@/components/inbox/disposition-chooser";
 import { FolderBins } from "@/components/inbox/folder-bins";
@@ -986,9 +987,7 @@ export function InboxClient() {
                 <p className="mb-4 font-mono text-[11px] text-ableton-orange">
                   {selected.internalDate ? new Date(selected.internalDate).toLocaleString() : "No timestamp"}
                 </p>
-                <div className="mb-6 border border-ableton-border bg-ableton-pane p-4 text-sm leading-relaxed text-ableton-text">
-                  {selected.snippet ?? "No preview available"}
-                </div>
+                <MessageBodyPanel messageId={selected.gmailId} fallbackSnippet={selected.snippet} />
                 <div
                   className={
                     isMdUp

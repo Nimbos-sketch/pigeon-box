@@ -1,4 +1,5 @@
 import { db } from "@/lib/db";
+import { extractBodiesFromPayload } from "@/server/gmail/body";
 import { createGmailClient } from "@/server/gmail/client";
 
 type MessageSummary = {
@@ -83,7 +84,7 @@ export async function getMessageById(userId: string, messageId: string) {
   });
   const data = detail.data;
   const labels = data.labelIds ?? [];
-  const bodyText = data.snippet ?? "";
+  const { text: bodyText, html: bodyHtml } = extractBodiesFromPayload(data.payload);
   const subject = headerValue(data.payload?.headers, "subject");
   const from = headerValue(data.payload?.headers, "from");
   return db.gmailMessage.upsert({
@@ -93,7 +94,8 @@ export async function getMessageById(userId: string, messageId: string) {
       subject,
       fromAddress: from,
       snippet: data.snippet,
-      bodyText,
+      bodyText: bodyText || data.snippet || null,
+      bodyHtml,
       internalDate: data.internalDate ? new Date(Number(data.internalDate)) : null,
       isUnread: labels.includes("UNREAD"),
       isStarred: labels.includes("STARRED"),
@@ -106,7 +108,8 @@ export async function getMessageById(userId: string, messageId: string) {
       subject,
       fromAddress: from,
       snippet: data.snippet,
-      bodyText,
+      bodyText: bodyText || data.snippet || null,
+      bodyHtml,
       internalDate: data.internalDate ? new Date(Number(data.internalDate)) : null,
       isUnread: labels.includes("UNREAD"),
       isStarred: labels.includes("STARRED"),

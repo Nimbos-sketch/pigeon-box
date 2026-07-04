@@ -2,6 +2,7 @@ import { db } from "@/lib/db";
 import { ensureContactHolesFromRecipients } from "@/server/pigeon-holes/service";
 import { createGmailClient } from "@/server/gmail/client";
 import { buildForwardBody, buildReplyBody, encodeRawEmail } from "@/server/gmail/mime";
+import { extractBodyFromPayload } from "@/server/gmail/body";
 import { getUserSettings } from "@/server/settings/service";
 
 export type SendEmailInput = {
@@ -18,25 +19,6 @@ function headerValue(
   key: string
 ): string | null {
   return headers?.find((header) => header.name?.toLowerCase() === key.toLowerCase())?.value ?? null;
-}
-
-function extractBodyFromPayload(
-  payload: { mimeType?: string | null; body?: { data?: string | null }; parts?: unknown[] } | null | undefined
-): string {
-  if (!payload) return "";
-  if (payload.body?.data) {
-    return Buffer.from(payload.body.data, "base64").toString("utf8");
-  }
-  if (payload.parts && Array.isArray(payload.parts)) {
-    for (const part of payload.parts as { mimeType?: string; body?: { data?: string }; parts?: unknown[] }[]) {
-      if (part.mimeType === "text/plain" && part.body?.data) {
-        return Buffer.from(part.body.data, "base64").toString("utf8");
-      }
-      const nested = extractBodyFromPayload(part);
-      if (nested) return nested;
-    }
-  }
-  return "";
 }
 
 export async function getMessageForCompose(userId: string, messageId: string) {

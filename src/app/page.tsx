@@ -29,6 +29,11 @@ export default async function Home() {
           <button type="submit" className="ableton-btn ableton-btn-primary w-full py-2.5 text-sm">
             Sign in with Google
           </button>
+          <p className="mt-4 text-center text-xs text-ableton-muted">
+            <a href="/auth/setup" className="text-ableton-orange underline">
+              Google OAuth setup (redirect URI mismatch?)
+            </a>
+          </p>
         </form>
       </div>
     </main>

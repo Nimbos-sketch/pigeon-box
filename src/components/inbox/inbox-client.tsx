@@ -1011,10 +1011,14 @@ export function InboxClient() {
                 onSpam={() => applyAction("spam", selected.gmailId)}
               />
             ) : (
-              <div className={mobileDetailMode ? "flex h-full min-h-0 flex-col overflow-hidden" : undefined}>
+              <div className={mobileDetailMode ? "relative flex h-full min-h-0 flex-col overflow-hidden" : undefined}>
                 {mobileDetailMode ? (
                   <>
-                    <div className="min-h-0 flex-1 overflow-y-auto px-4 pt-4">
+                    <div
+                      className={`min-h-0 flex-1 overflow-y-auto px-4 pt-4 ${
+                        mobileResponseMode ? "pb-[min(44dvh,360px)]" : ""
+                      }`}
+                    >
                       {selected.isPhishingRisk ? <PhishingWarningBanner /> : null}
                       <h2 className="line-clamp-2 text-lg font-semibold leading-snug">
                         {selected.subject ?? "(No subject)"}
@@ -1026,10 +1030,17 @@ export function InboxClient() {
                       <MessageBodyPanel
                         messageId={selected.gmailId}
                         fallbackSnippet={selected.snippet}
-                        fill
+                        preferFormatted={mobileResponseMode}
+                        embedded={mobileResponseMode}
                       />
                     </div>
-                    <div className="shrink-0 border-t border-ableton-border bg-ableton-pane px-3 py-2 shadow-[0_-4px_12px_rgba(0,0,0,0.25)]">
+                    <div
+                      className={
+                        mobileResponseMode
+                          ? "absolute inset-x-0 bottom-0 z-10 max-h-[min(44dvh,360px)] overflow-y-auto border-t border-ableton-border bg-ableton-pane/92 px-3 py-2 shadow-[0_-10px_28px_rgba(0,0,0,0.5)] backdrop-blur-md"
+                          : "shrink-0 border-t border-ableton-border bg-ableton-pane px-3 py-2 shadow-[0_-4px_12px_rgba(0,0,0,0.25)]"
+                      }
+                    >
                       {showDispositionFlow && !dispositionModeForSelected ? (
                         <DispositionChooser
                           compact

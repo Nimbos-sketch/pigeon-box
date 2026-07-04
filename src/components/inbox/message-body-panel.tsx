@@ -14,9 +14,19 @@ type MessageBodyPanelProps = {
   fallbackSnippet: string | null;
   /** Fill remaining flex space; body scrolls inside the panel. */
   fill?: boolean;
+  /** Show formatted HTML by default when available (mobile respond overlay). */
+  preferFormatted?: boolean;
+  /** Borderless body for scrolling under a mobile overlay panel. */
+  embedded?: boolean;
 };
 
-export function MessageBodyPanel({ messageId, fallbackSnippet, fill = false }: MessageBodyPanelProps) {
+export function MessageBodyPanel({
+  messageId,
+  fallbackSnippet,
+  fill = false,
+  preferFormatted = false,
+  embedded = false
+}: MessageBodyPanelProps) {
   const [detail, setDetail] = useState<MessageDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -37,6 +47,9 @@ export function MessageBodyPanel({ messageId, fallbackSnippet, fill = false }: M
         const data = (await response.json()) as { message?: MessageDetail };
         if (!cancelled) {
           setDetail(data.message ?? null);
+          if (preferFormatted && data.message?.bodyHtml?.trim()) {
+            setShowFormatted(true);
+          }
         }
       })
       .catch((loadError) => {
@@ -53,21 +66,44 @@ export function MessageBodyPanel({ messageId, fallbackSnippet, fill = false }: M
     return () => {
       cancelled = true;
     };
-  }, [messageId]);
+  }, [messageId, preferFormatted]);
 
   const bodyText = detail?.bodyText?.trim() || detail?.snippet?.trim() || fallbackSnippet?.trim() || "";
   const bodyHtml = detail?.bodyHtml?.trim() || null;
   const canShowFormatted = Boolean(bodyHtml);
 
+  function resizeEmbeddedIframe(iframe: HTMLIFrameElement) {
+    const doc = iframe.contentDocument;
+    if (doc?.body) {
+      iframe.style.height = `${Math.max(doc.body.scrollHeight, 320)}px`;
+    }
+  }
+
   return (
     <div
-      className={`border border-ableton-border bg-ableton-pane ${
-        fill ? "mb-0 flex min-h-0 flex-1 flex-col overflow-hidden" : "mb-6"
-      }`}
+      className={
+        embedded
+          ? "mb-4"
+          : `border border-ableton-border bg-ableton-pane ${
+              fill ? "mb-0 flex min-h-0 flex-1 flex-col overflow-hidden" : "mb-6"
+            }`
+      }
     >
-      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-ableton-border bg-ableton-pane2 px-3 py-2">
-        <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-ableton-muted">Message</p>
-        {canShowFormatted ? (
+      {!embedded ? (
+        <div className="flex shrink-0 items-center justify-between gap-2 border-b border-ableton-border bg-ableton-pane2 px-3 py-2">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-ableton-muted">Message</p>
+          {canShowFormatted ? (
+            <button
+              type="button"
+              className={`ableton-chip px-2 py-1 text-[10px] ${showFormatted ? "ableton-chip-active" : ""}`}
+              onClick={() => setShowFormatted((current) => !current)}
+            >
+              {showFormatted ? "Plain text" : "Formatted"}
+            </button>
+          ) : null}
+        </div>
+      ) : canShowFormatted ? (
+        <div className="mb-2 flex justify-end">
           <button
             type="button"
             className={`ableton-chip px-2 py-1 text-[10px] ${showFormatted ? "ableton-chip-active" : ""}`}
@@ -75,12 +111,14 @@ export function MessageBodyPanel({ messageId, fallbackSnippet, fill = false }: M
           >
             {showFormatted ? "Plain text" : "Formatted"}
           </button>
-        ) : null}
-      </div>
+        </div>
+      ) : null}
 
       <div
-        className={`overflow-y-auto p-4 text-sm leading-relaxed text-ableton-text ${
-          fill ? "min-h-0 flex-1" : "max-h-[min(50vh,28rem)]"
+        className={`text-sm leading-relaxed text-ableton-text ${
+          embedded
+            ? "overflow-visible"
+            : `overflow-y-auto p-4 ${fill ? "min-h-0 flex-1" : "max-h-[min(50vh,28rem)]"}`
         }`}
       >
         {loading ? (
@@ -92,7 +130,16 @@ export function MessageBodyPanel({ messageId, fallbackSnippet, fill = false }: M
             title="Email content"
             sandbox=""
             srcDoc={wrapHtmlDocument(bodyHtml)}
-            className="min-h-[12rem] w-full border border-ableton-border bg-white"
+            onLoad={(event) => {
+              if (embedded) {
+                resizeEmbeddedIframe(event.currentTarget);
+              }
+            }}
+            className={
+              embedded
+                ? "min-h-[20rem] w-full border-0 bg-white"
+                : "min-h-[12rem] w-full border border-ableton-border bg-white"
+            }
           />
         ) : (
           <p className="whitespace-pre-wrap break-words">{bodyText || "No message body available."}</p>

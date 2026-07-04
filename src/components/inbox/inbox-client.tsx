@@ -960,7 +960,7 @@ export function InboxClient() {
         showWorkspaceOnMobile={Boolean(selected)}
         compactChrome={mobileResponseMode}
         onBackToGrid={handleBackToGrid}
-        workspaceTitle={mobileResponseMode ? "Respond or action" : (selected?.subject ?? undefined)}
+        workspaceTitle={selected?.subject ?? undefined}
         hint={
           triageEnabled
             ? "One active cell at a time"
@@ -1012,45 +1012,103 @@ export function InboxClient() {
               />
             ) : (
               <div className={mobileDetailMode ? "flex h-full min-h-0 flex-col overflow-hidden" : undefined}>
-                {mobileResponseMode ? (
-                  <div className="flex min-h-0 flex-1 flex-col justify-center gap-2 overflow-hidden px-3 py-2">
-                    {showDispositionFlow && !dispositionModeForSelected ? (
-                      <DispositionChooser
-                        compact
-                        suggestedQueue={selected.obligationQueue ?? "action"}
-                        onChoose={handleChooseDisposition}
-                      />
-                    ) : null}
-                    {showDispositionFlow && dispositionModeForSelected === "action" ? (
-                      <FolderBins
-                        compact
-                        folders={folders}
-                        filing={filing}
-                        suggestedFolderId={suggestedFolderId}
-                        onFile={(folderId) => void fileToFolder(selected.gmailId, folderId)}
-                        onArchive={() => void finishDisposition(selected.gmailId, "archive")}
-                      />
-                    ) : null}
-                    {showDispositionFlow && dispositionModeForSelected === "respond" ? (
-                      <RespondPanel
-                        compact
+                {mobileDetailMode ? (
+                  <>
+                    <div className="min-h-0 flex-1 overflow-y-auto px-4 pt-4">
+                      {selected.isPhishingRisk ? <PhishingWarningBanner /> : null}
+                      <h2 className="line-clamp-2 text-lg font-semibold leading-snug">
+                        {selected.subject ?? "(No subject)"}
+                      </h2>
+                      <p className="mt-1 text-xs text-ableton-muted">{selected.fromAddress ?? "Unknown sender"}</p>
+                      <p className="mb-3 font-mono text-[10px] text-ableton-orange">
+                        {selected.internalDate ? new Date(selected.internalDate).toLocaleString() : "No timestamp"}
+                      </p>
+                      <MessageBodyPanel
                         messageId={selected.gmailId}
-                        sending={sendingQuickReply}
-                        onQuickReply={(template) => void handleQuickReply(template)}
-                        onArchiveAfterReply={() => void finishDisposition(selected.gmailId, "archive")}
+                        fallbackSnippet={selected.snippet}
+                        fill
                       />
-                    ) : null}
-                    {triageEnabled ? (
-                      <TriageSafetyActions
-                        compact
-                        onTrash={() => applyAction("trash", selected.gmailId)}
-                        onSpam={() => applyAction("spam", selected.gmailId)}
-                      />
-                    ) : null}
-                  </div>
+                    </div>
+                    <div className="shrink-0 border-t border-ableton-border bg-ableton-pane px-3 py-2 shadow-[0_-4px_12px_rgba(0,0,0,0.25)]">
+                      {showDispositionFlow && !dispositionModeForSelected ? (
+                        <DispositionChooser
+                          compact
+                          suggestedQueue={selected.obligationQueue ?? "action"}
+                          onChoose={handleChooseDisposition}
+                        />
+                      ) : null}
+                      {showDispositionFlow && dispositionModeForSelected === "action" ? (
+                        <FolderBins
+                          compact
+                          folders={folders}
+                          filing={filing}
+                          suggestedFolderId={suggestedFolderId}
+                          onFile={(folderId) => void fileToFolder(selected.gmailId, folderId)}
+                          onArchive={() => void finishDisposition(selected.gmailId, "archive")}
+                        />
+                      ) : null}
+                      {showDispositionFlow && dispositionModeForSelected === "respond" ? (
+                        <RespondPanel
+                          compact
+                          messageId={selected.gmailId}
+                          sending={sendingQuickReply}
+                          onQuickReply={(template) => void handleQuickReply(template)}
+                          onArchiveAfterReply={() => void finishDisposition(selected.gmailId, "archive")}
+                        />
+                      ) : null}
+                      {!showDispositionFlow && !triageEnabled && !viewingFolderId ? (
+                        <FileToFolder
+                          folders={folders}
+                          selectedFolderId={fileTargetFolderId}
+                          onFolderSelect={setFileTargetFolderId}
+                          onFile={() => void fileToFolder(selected.gmailId, fileTargetFolderId)}
+                          canFile={canFileSelected}
+                          filing={filing}
+                          required={false}
+                        />
+                      ) : null}
+                      {!showDispositionFlow ? (
+                        <div className="mt-2 flex flex-wrap gap-2">
+                          {!triageEnabled && activeMailbox !== "DRAFT" && activeMailbox !== "SENT" ? (
+                            <>
+                              <a className="ableton-btn text-xs" href={`/compose?mode=reply&id=${selected.gmailId}`}>
+                                Reply
+                              </a>
+                              <a className="ableton-btn text-xs" href={`/compose?mode=forward&id=${selected.gmailId}`}>
+                                Forward
+                              </a>
+                            </>
+                          ) : null}
+                          {triageEnabled ? (
+                            <TriageSafetyActions
+                              compact
+                              onTrash={() => applyAction("trash", selected.gmailId)}
+                              onSpam={() => applyAction("spam", selected.gmailId)}
+                            />
+                          ) : (
+                            visibleMailboxActions.map((action) => (
+                              <button
+                                key={action}
+                                className={`ableton-btn text-xs ${action === "delete_forever" ? "border-red-800 text-red-300" : ""}`}
+                                onClick={() => applyAction(action, selected.gmailId)}
+                              >
+                                {ACTION_LABELS[action]}
+                              </button>
+                            ))
+                          )}
+                        </div>
+                      ) : triageEnabled ? (
+                        <TriageSafetyActions
+                          compact
+                          onTrash={() => applyAction("trash", selected.gmailId)}
+                          onSpam={() => applyAction("spam", selected.gmailId)}
+                        />
+                      ) : null}
+                    </div>
+                  </>
                 ) : (
                   <>
-                    <div className={mobileDetailMode ? "min-h-0 flex-1 overflow-y-auto px-4 pt-4" : undefined}>
+                    <div>
                       {selectedWeekGroup && isMdUp ? (
                         <div className="mb-4 border border-ableton-border bg-ableton-pane2 p-3">
                           <p className="pigeon-slot-id">ROW {selectedWeekGroup.label}</p>
@@ -1071,15 +1129,9 @@ export function InboxClient() {
                       <p className="mb-4 font-mono text-[11px] text-ableton-orange">
                         {selected.internalDate ? new Date(selected.internalDate).toLocaleString() : "No timestamp"}
                       </p>
-                      <MessageBodyPanel messageId={selected.gmailId} fallbackSnippet={selected.snippet} fill={mobileDetailMode} />
+                      <MessageBodyPanel messageId={selected.gmailId} fallbackSnippet={selected.snippet} />
                     </div>
-                    <div
-                      className={
-                        mobileDetailMode
-                          ? "shrink-0 border-t border-ableton-border bg-ableton-pane px-4 py-3"
-                          : undefined
-                      }
-                    >
+                    <div>
                       {showDispositionFlow && !dispositionModeForSelected ? (
                         <DispositionChooser
                           suggestedQueue={selected.obligationQueue ?? "action"}

@@ -20,12 +20,9 @@ import { FolderManager, type EmailFolder } from "@/components/inbox/folder-manag
 import { WeekGroupedMessageList } from "@/components/inbox/week-grouped-message-list";
 import { WeekInboxDigest } from "@/components/inbox/week-inbox-digest";
 import { WeekProgress } from "@/components/inbox/week-progress";
-import { SmartHandlingBanner } from "@/components/inbox/smart-handling-banner";
 import { TeamPigeonHoles } from "@/components/inbox/team-pigeon-holes";
 import { TriageSafetyActions } from "@/components/inbox/triage-safety-actions";
-import { formatSenderRuleNotice } from "@/lib/sender-rule-notice";
 import { DEFAULT_FOLDER_COLOR } from "@/lib/folder-colors";
-import type { AutoHandledSummary } from "@/lib/sender-rules";
 import type { ActiveDisposition, DispositionMode, QuickReplyTemplate } from "@/lib/inbox-disposition";
 import { countByQueue, type ObligationQueue } from "@/lib/inbox-queues";
 import { findWeekGroupForMessage, groupInboxMessagesByWeek } from "@/lib/inbox-week-groups";
@@ -130,7 +127,6 @@ export function InboxClient() {
   const [triageNotice, setTriageNotice] = useState<string | null>(null);
   const [activeDisposition, setActiveDisposition] = useState<ActiveDisposition | null>(null);
   const [sendingQuickReply, setSendingQuickReply] = useState(false);
-  const [autoHandled, setAutoHandled] = useState<AutoHandledSummary[]>([]);
   const [activeModuleId, setActiveModuleId] = useState<InboxModuleId>(DEFAULT_ACTIVE_MODULE);
   const [mobileEmailFullscreen, setMobileEmailFullscreen] = useState(false);
 
@@ -426,7 +422,6 @@ export function InboxClient() {
         ...message,
         accentColor: message.accentColor ?? null
       }));
-      const handled: AutoHandledSummary[] = messagesJson.autoHandled ?? [];
       let nextMessages = incoming;
 
       setMessages((current) => {
@@ -436,7 +431,6 @@ export function InboxClient() {
 
       setNextPageToken(messagesJson.nextPageToken ?? null);
       setTotalEstimate(messagesJson.resultSizeEstimate ?? null);
-      setAutoHandled((current) => (isLoadMore ? [...current, ...handled] : handled));
 
       if (!isLoadMore) {
         setExpandedWeekKey(null);
@@ -507,11 +501,6 @@ export function InboxClient() {
       if (!res.ok) {
         throw new Error("Failed to file message");
       }
-      const body = (await res.json()) as { senderRule?: Parameters<typeof formatSenderRuleNotice>[0] };
-      const learned = formatSenderRuleNotice(body.senderRule);
-      if (learned) {
-        setTriageNotice(learned);
-      }
 
       if (triageEnabled) {
         markDispositioned(messageId);
@@ -532,9 +521,7 @@ export function InboxClient() {
         }
         return next;
       });
-      if (!learned) {
-        setTriageNotice(null);
-      }
+      setTriageNotice(null);
       setFileTargetFolderId(folderId);
     } catch {
       setMessages(previous);
@@ -603,12 +590,6 @@ export function InboxClient() {
       });
       if (!res.ok) {
         throw new Error("Failed to update message");
-      }
-
-      const body = (await res.json()) as { senderRule?: Parameters<typeof formatSenderRuleNotice>[0] };
-      const learned = formatSenderRuleNotice(body.senderRule);
-      if (learned) {
-        setTriageNotice(learned);
       }
 
       if (willRemoveFromView && !isBlockedContent) {
@@ -750,7 +731,7 @@ export function InboxClient() {
   const activeOverviewFilter = useMemo(() => getOverviewFilter(summaryFilter), [summaryFilter]);
   const folderSummary = viewingFolder ? viewingFolder.name : "Inbox";
 
-  const showQueue = autoHandled.length > 0 || (triageEnabled && messages.length > 0);
+  const showQueue = triageEnabled && messages.length > 0;
 
   const visibleModuleIds = useMemo(() => {
     const ids: InboxModuleId[] = ["overview", "transport", "folders", "mailboxes"];
@@ -767,9 +748,7 @@ export function InboxClient() {
       transport: `${messages.length} tracks`,
       folders: `${folders.length} · ${folderSummary}`,
       mailboxes: activeMailboxView.label,
-      queue: triageEnabled
-        ? `${queueCounts.response} respond · ${queueCounts.action} action`
-        : `${autoHandled.length} auto-handled`,
+      queue: `${queueCounts.response} respond · ${queueCounts.action} action`,
       teamHoles: "Team grid",
       inbox: selected?.subject ?? "Grid · workspace"
     }),
@@ -782,7 +761,6 @@ export function InboxClient() {
       triageEnabled,
       queueCounts.response,
       queueCounts.action,
-      autoHandled.length,
       selected?.subject
     ]
   );
@@ -948,7 +926,6 @@ export function InboxClient() {
         {activeModuleId === "queue" && showQueue ? (
           <ModulePanel title="Queue & alerts" summary={moduleSummaries.queue} onMinimize={minimizeActiveModule}>
             <div className="space-y-3 p-3">
-              <SmartHandlingBanner autoHandled={autoHandled} onDismiss={() => setAutoHandled([])} />
               {triageEnabled && messages.length > 0 ? (
                 <ObligationQueueBanner
                   responseCount={queueCounts.response}

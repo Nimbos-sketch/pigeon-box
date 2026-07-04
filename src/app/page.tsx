@@ -23,7 +23,7 @@ export default async function Home() {
           className="ableton-panel p-6"
         >
           <div className="mb-4 flex items-center gap-3">
-            <PigeonLogo size={48} priority />
+            <PigeonLogo size={48} />
             <div>
               <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-ableton-orange">Session</p>
               <h1 className="text-2xl font-semibold">Pigeon Box</h1>

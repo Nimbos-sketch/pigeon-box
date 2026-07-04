@@ -291,8 +291,28 @@
 
   .mobile-message-scroll {
     -webkit-overflow-scrolling: touch;
-    overscroll-behavior-y: contain;
+    overscroll-behavior-y: auto;
     touch-action: pan-y;
+    overflow-anchor: auto;
+  }
+
+  .email-formatted-body {
+    overflow: visible;
+    word-break: break-word;
+  }
+
+  .email-formatted-body img {
+    max-width: 100%;
+    height: auto;
+  }
+
+  .email-formatted-body table {
+    max-width: 100%;
+  }
+
+  .email-formatted-body a {
+    color: #c45a2c;
+    text-decoration: underline;
   }
 }
 

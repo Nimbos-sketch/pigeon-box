@@ -64,7 +64,7 @@ export function PigeonWorkspace({
       </div>
 
       {mobileDetail ? (
-        <div className="pigeon-workspace-pane flex min-h-0 flex-1 flex-col border-0 p-0">{workspace}</div>
+        <div className="pigeon-workspace-pane flex min-h-0 flex-1 flex-col overflow-hidden border-0 p-0">{workspace}</div>
       ) : (
         <div className="grid min-h-0 grid-cols-1 md:grid-cols-[minmax(0,2fr)_minmax(240px,1fr)] md:min-h-[420px] lg:min-h-[560px]">
           <div

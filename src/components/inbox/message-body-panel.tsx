@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { stripUnsafeHtml } from "@/lib/email-html";
 
 type MessageDetail = {
   bodyText: string | null;
@@ -99,7 +100,7 @@ export function MessageBodyPanel({
   const canShowFormatted = Boolean(bodyHtml);
 
   useEffect(() => {
-    if (!embedded || !showFormatted || !bodyHtml || !iframeRef.current) {
+    if (embedded || !showFormatted || !bodyHtml || !iframeRef.current) {
       return;
     }
     wireEmbeddedIframe(iframeRef.current);
@@ -152,23 +153,24 @@ export function MessageBodyPanel({
         ) : error ? (
           <p className="whitespace-pre-wrap text-ableton-text">{bodyText || "No message body available."}</p>
         ) : showFormatted && bodyHtml ? (
+          embedded ? (
+            <div
+              className="email-formatted-body w-full bg-white p-3 text-sm leading-relaxed text-[#111]"
+              dangerouslySetInnerHTML={{ __html: stripUnsafeHtml(bodyHtml) }}
+            />
+          ) : (
           <iframe
             ref={iframeRef}
             title="Email content"
             sandbox=""
             scrolling="no"
-            srcDoc={wrapHtmlDocument(bodyHtml, embedded)}
+            srcDoc={wrapHtmlDocument(bodyHtml)}
             onLoad={(event) => {
-              if (embedded) {
-                wireEmbeddedIframe(event.currentTarget);
-              }
+              wireEmbeddedIframe(event.currentTarget);
             }}
-            className={
-              embedded
-                ? "min-h-[20rem] w-full border-0 bg-white"
-                : "min-h-[12rem] w-full border border-ableton-border bg-white"
-            }
+            className="min-h-[12rem] w-full border border-ableton-border bg-white"
           />
+          )
         ) : (
           <p className="whitespace-pre-wrap break-words">{bodyText || "No message body available."}</p>
         )}
@@ -177,12 +179,10 @@ export function MessageBodyPanel({
   );
 }
 
-function wrapHtmlDocument(html: string, embedded: boolean): string {
-  const overflowRule = embedded ? "html, body { overflow: hidden; }" : "";
+function wrapHtmlDocument(html: string): string {
   return `<!DOCTYPE html><html><head><meta charset="utf-8"><base target="_blank"><style>
     body { margin: 0; padding: 0; font-family: system-ui, sans-serif; font-size: 14px; line-height: 1.5; color: #111; }
     img { max-width: 100%; height: auto; }
     a { color: #c45a2c; }
-    ${overflowRule}
   </style></head><body>${html}</body></html>`;
 }

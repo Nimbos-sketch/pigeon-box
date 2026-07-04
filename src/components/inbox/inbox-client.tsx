@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { AiOverview } from "@/components/inbox/ai-overview";
 import { InboxModuleTabs } from "@/components/inbox/inbox-module-tabs";
 import { MessageBodyPanel } from "@/components/inbox/message-body-panel";
+import { MobileEmailScrollContent } from "@/components/inbox/mobile-email-scroll-content";
 import { ModulePanel } from "@/components/inbox/module-panel";
 import { DispositionChooser } from "@/components/inbox/disposition-chooser";
 import { FolderBins } from "@/components/inbox/folder-bins";
@@ -1025,10 +1026,10 @@ export function InboxClient() {
                 onSpam={() => applyAction("spam", selected.gmailId)}
               />
             ) : (
-              <div className={mobileDetailMode ? "flex min-h-0 flex-1 flex-col" : undefined}>
+              <div className={mobileDetailMode ? "flex min-h-0 flex-1 flex-col overflow-hidden" : undefined}>
                 {mobileDetailMode ? (
                   mobileResponseMode && mobileEmailFullscreen ? (
-                    <div className="flex min-h-0 flex-1 flex-col">
+                    <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
                       <div className="shrink-0 flex items-center gap-2 border-b border-ableton-border bg-ableton-pane px-3 py-2.5 shadow-[0_2px_10px_rgba(0,0,0,0.2)]">
                         <button
                           type="button"
@@ -1041,20 +1042,7 @@ export function InboxClient() {
                           {selected.fromAddress ?? "Unknown sender"}
                         </span>
                       </div>
-                      <div className="mobile-message-scroll min-h-0 flex-1 overflow-y-auto overscroll-y-contain px-4 pt-4 pb-[max(1.5rem,env(safe-area-inset-bottom))]">
-                        {selected.isPhishingRisk ? <PhishingWarningBanner /> : null}
-                        <h2 className="text-lg font-semibold leading-snug">{selected.subject ?? "(No subject)"}</h2>
-                        <p className="mt-1 text-xs text-ableton-muted">{selected.fromAddress ?? "Unknown sender"}</p>
-                        <p className="mb-3 font-mono text-[10px] text-ableton-orange">
-                          {selected.internalDate ? new Date(selected.internalDate).toLocaleString() : "No timestamp"}
-                        </p>
-                        <MessageBodyPanel
-                          messageId={selected.gmailId}
-                          fallbackSnippet={selected.snippet}
-                          preferFormatted
-                          embedded
-                        />
-                      </div>
+                      <MobileEmailScrollContent message={selected} preferFormatted />
                     </div>
                   ) : (
                   <>
@@ -1106,22 +1094,7 @@ export function InboxClient() {
                         </button>
                       </div>
                     ) : null}
-                    <div className="mobile-message-scroll min-h-0 flex-1 overflow-y-auto overscroll-y-contain px-4 pt-4 pb-[max(1.5rem,env(safe-area-inset-bottom))]">
-                      {selected.isPhishingRisk ? <PhishingWarningBanner /> : null}
-                      <h2 className="text-lg font-semibold leading-snug">
-                        {selected.subject ?? "(No subject)"}
-                      </h2>
-                      <p className="mt-1 text-xs text-ableton-muted">{selected.fromAddress ?? "Unknown sender"}</p>
-                      <p className="mb-3 font-mono text-[10px] text-ableton-orange">
-                        {selected.internalDate ? new Date(selected.internalDate).toLocaleString() : "No timestamp"}
-                      </p>
-                      <MessageBodyPanel
-                        messageId={selected.gmailId}
-                        fallbackSnippet={selected.snippet}
-                        preferFormatted={mobileResponseMode}
-                        embedded
-                      />
-                    </div>
+                    <MobileEmailScrollContent message={selected} preferFormatted />
                     {!mobileResponseMode ? (
                       <div className="shrink-0 border-t border-ableton-border bg-ableton-pane px-3 py-2 shadow-[0_-4px_12px_rgba(0,0,0,0.25)]">
                         {!showDispositionFlow && !triageEnabled && !viewingFolderId ? (

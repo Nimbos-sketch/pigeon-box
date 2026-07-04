@@ -48,6 +48,7 @@ import {
   type MailboxViewId,
   type MessageAction
 } from "@/lib/mailbox-views";
+import { useIsMdUp } from "@/hooks/use-media-query";
 
 type Message = {
   gmailId: string;
@@ -106,6 +107,7 @@ function mergeMessages(current: Message[], incoming: Message[]): Message[] {
 export function InboxClient() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const isMdUp = useIsMdUp();
   const [messages, setMessages] = useState<Message[]>([]);
   const [labels, setLabels] = useState<Label[]>([]);
   const [folders, setFolders] = useState<EmailFolder[]>([]);
@@ -314,6 +316,11 @@ export function InboxClient() {
 
   function handleWeekToggle(weekKey: string) {
     setExpandedWeekKey((current) => (current === weekKey ? null : weekKey));
+  }
+
+  function handleBackToGrid() {
+    setSelectedId(null);
+    setAwaitingDispositionId(null);
   }
 
   function handleSelectMessage(messageId: string) {
@@ -889,6 +896,9 @@ export function InboxClient() {
 
         {activeModuleId === "inbox" ? (
       <PigeonWorkspace
+        showWorkspaceOnMobile={Boolean(selected)}
+        onBackToGrid={handleBackToGrid}
+        workspaceTitle={selected?.subject ?? undefined}
         hint={
           triageEnabled
             ? "One active cell at a time"
@@ -963,6 +973,13 @@ export function InboxClient() {
                 <div className="mb-6 border border-ableton-border bg-ableton-pane p-4 text-sm leading-relaxed text-ableton-text">
                   {selected.snippet ?? "No preview available"}
                 </div>
+                <div
+                  className={
+                    isMdUp
+                      ? undefined
+                      : "sticky bottom-0 z-10 -mx-4 border-t border-ableton-border bg-ableton-pane px-4 py-3 shadow-[0_-10px_28px_rgba(0,0,0,0.28)]"
+                  }
+                >
                 {showDispositionFlow && !dispositionModeForSelected ? (
                   <DispositionChooser
                     suggestedQueue={selected.obligationQueue ?? "action"}
@@ -1049,11 +1066,14 @@ export function InboxClient() {
                     </p>
                   ) : null}
                 </div>
+                </div>
+                {isMdUp ? (
                 <WeekInboxDigest
                   groups={weekGroups}
                   selectedWeekKey={selectedWeekGroup?.key ?? null}
                   onJumpToWeek={jumpToWeek}
                 />
+                ) : null}
               </>
             )
           ) : (

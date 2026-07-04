@@ -3,7 +3,9 @@ import Google from "next-auth/providers/google";
 import { PrismaAdapter } from "@auth/prisma-adapter";
 import { db } from "@/lib/db";
 import { encryptText } from "@/lib/crypto";
+import { env } from "@/lib/env";
 import { logger } from "@/lib/logger";
+import { ensureOrgMembership } from "@/server/org/membership";
 
 async function persistGmailTokens(
   userId: string,
@@ -11,7 +13,7 @@ async function persistGmailTokens(
   account: { refresh_token?: string | null; access_token?: string | null; expires_at?: number | null }
 ) {
   if (!account.refresh_token) {
-    logger.warn({ email }, "Google sign-in did not provide refresh token");
+    logger.warn({ userId }, "Google sign-in did not provide refresh token");
     return;
   }
 
@@ -30,6 +32,15 @@ async function persistGmailTokens(
       accessExpiresAt: account.expires_at ? new Date(account.expires_at * 1000) : null
     }
   });
+
+  await db.account.updateMany({
+    where: { userId, provider: "google" },
+    data: {
+      refresh_token: null,
+      access_token: null,
+      id_token: null
+    }
+  });
 }
 
 export const authConfig: NextAuthConfig = {
@@ -38,14 +49,14 @@ export const authConfig: NextAuthConfig = {
     error: "/auth/error"
   },
   adapter: PrismaAdapter(db),
-  secret: process.env.AUTH_SECRET ?? process.env.NEXTAUTH_SECRET,
+  secret: env.authSecret,
   trustHost: true,
-  debug: process.env.NODE_ENV === "development",
+  debug: env.authDebug,
   session: { strategy: "jwt", maxAge: 30 * 24 * 60 * 60 },
   providers: [
     Google({
-      clientId: process.env.GOOGLE_CLIENT_ID ?? process.env.AUTH_GOOGLE_ID,
-      clientSecret: process.env.GOOGLE_CLIENT_SECRET ?? process.env.AUTH_GOOGLE_SECRET,
+      clientId: env.googleClientId,
+      clientSecret: env.googleClientSecret,
       authorization: {
         params: {
           access_type: "offline",
@@ -70,8 +81,9 @@ export const authConfig: NextAuthConfig = {
       }
       try {
         await persistGmailTokens(user.id, user.email, account);
+        await ensureOrgMembership(user.id, user.email);
       } catch (error) {
-        logger.error({ err: String(error), email: user.email }, "Failed to persist Gmail tokens after sign-in");
+        logger.error({ err: String(error), userId: user.id }, "Failed to persist Gmail tokens after sign-in");
       }
     }
   },
@@ -80,11 +92,17 @@ export const authConfig: NextAuthConfig = {
       if (user?.id) {
         token.sub = user.id;
       }
+      if (user?.email) {
+        token.email = user.email;
+      }
       return token;
     },
     async session({ session, token }) {
       if (session.user && token.sub) {
         session.user.id = token.sub;
+      }
+      if (session.user && typeof token.email === "string") {
+        session.user.email = token.email;
       }
       return session;
     }

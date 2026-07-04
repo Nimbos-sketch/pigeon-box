@@ -1,4 +1,5 @@
 import { isNsfwEmail } from "@/lib/nsfw-filter";
+import { env } from "@/lib/env";
 import { createGmailClient } from "@/server/gmail/client";
 import { logger } from "@/lib/logger";
 import { getOverviewFilter, type OverviewFilterId } from "@/lib/overview-filters";
@@ -155,8 +156,12 @@ function buildAiSystemPrompt(filterId: OverviewFilterId): string {
 }
 
 async function buildAiOverview(messages: RawMessage[], filterId: OverviewFilterId): Promise<OverviewItem[] | null> {
-  const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey || messages.length === 0) {
+  if (!env.aiOverviewEnabled || messages.length === 0) {
+    return null;
+  }
+
+  const apiKey = env.openAiApiKey;
+  if (!apiKey) {
     return null;
   }
 
@@ -177,7 +182,7 @@ async function buildAiOverview(messages: RawMessage[], filterId: OverviewFilterI
         "Content-Type": "application/json"
       },
       body: JSON.stringify({
-        model: process.env.OPENAI_MODEL ?? "gpt-4o-mini",
+        model: env.openAiModel,
         temperature: 0.5,
         response_format: { type: "json_object" },
         messages: [

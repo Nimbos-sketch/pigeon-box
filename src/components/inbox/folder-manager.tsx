@@ -1,11 +1,14 @@
 "use client";
 
 import { useState } from "react";
+import { FolderColorPicker } from "@/components/inbox/folder-color-picker";
+import { DEFAULT_FOLDER_COLOR } from "@/lib/folder-colors";
 
 export type EmailFolder = {
   id: string;
   name: string;
   gmailLabelId: string;
+  color: string;
 };
 
 type FolderManagerProps = {
@@ -13,17 +16,22 @@ type FolderManagerProps = {
   selectedFolderId: string | null;
   onFolderViewChange: (folderId: string | null) => void;
   onFolderCreated: (folder: EmailFolder) => void;
+  onFolderColorChange: (folderId: string, color: string) => void;
 };
 
 export function FolderManager({
   folders,
   selectedFolderId,
   onFolderViewChange,
-  onFolderCreated
+  onFolderCreated,
+  onFolderColorChange
 }: FolderManagerProps) {
   const [newFolderName, setNewFolderName] = useState("");
+  const [newFolderColor, setNewFolderColor] = useState<string>(DEFAULT_FOLDER_COLOR);
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const activeFolder = folders.find((folder) => folder.id === selectedFolderId) ?? null;
 
   async function handleCreateFolder(event: React.FormEvent) {
     event.preventDefault();
@@ -38,7 +46,7 @@ export function FolderManager({
       const response = await fetch("/api/folders", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name })
+        body: JSON.stringify({ name, color: newFolderColor })
       });
       if (!response.ok) {
         throw new Error("Could not create folder");
@@ -54,51 +62,65 @@ export function FolderManager({
   }
 
   return (
-    <div className="ableton-panel mb-4">
-      <div className="ableton-panel-header">Folders</div>
-      <div className="flex flex-col gap-3 p-3 lg:flex-row lg:items-end">
-        <div className="flex-1">
-          <label htmlFor="folder-view" className="mb-1 block text-[10px] uppercase tracking-[0.14em] text-ableton-muted">
-            View folder
-          </label>
-          <select
-            id="folder-view"
-            className="ableton-input w-full"
-            value={selectedFolderId ?? ""}
-            onChange={(e) => onFolderViewChange(e.target.value || null)}
-          >
-            <option value="">Inbox (unfiled)</option>
-            {folders.map((folder) => (
-              <option key={folder.id} value={folder.id}>
-                {folder.name}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        <form onSubmit={handleCreateFolder} className="flex flex-1 gap-2">
-          <div className="flex-1">
-            <label htmlFor="new-folder" className="mb-1 block text-[10px] uppercase tracking-[0.14em] text-ableton-muted">
-              New folder
-            </label>
-            <input
-              id="new-folder"
-              className="ableton-input w-full"
-              value={newFolderName}
-              onChange={(e) => setNewFolderName(e.target.value)}
-              placeholder="e.g. Clients, Finance, Projects"
-              maxLength={64}
-            />
-          </div>
-          <button type="submit" disabled={creating || !newFolderName.trim()} className="ableton-btn ableton-btn-primary mt-5 px-4">
-            {creating ? "..." : "Create"}
-          </button>
-        </form>
+    <div className="space-y-3 p-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <button
+          type="button"
+          onClick={() => onFolderViewChange(null)}
+          className={`ableton-chip ${selectedFolderId === null ? "ableton-chip-active" : ""}`}
+        >
+          Inbox
+        </button>
+        {folders.map((folder) => {
+          const isActive = folder.id === selectedFolderId;
+          return (
+            <button
+              key={folder.id}
+              type="button"
+              onClick={() => onFolderViewChange(folder.id)}
+              className={`ableton-chip border-l-[3px] ${isActive ? "ableton-chip-active" : ""}`}
+              style={{ borderLeftColor: folder.color }}
+            >
+              {folder.name}
+            </button>
+          );
+        })}
       </div>
-      {error ? <p className="px-3 pb-3 text-xs text-red-300">{error}</p> : null}
+
+      <form onSubmit={handleCreateFolder} className="flex flex-wrap items-center gap-2">
+        <input
+          className="ableton-input min-w-[10rem] flex-1"
+          value={newFolderName}
+          onChange={(e) => setNewFolderName(e.target.value)}
+          placeholder="New folder name"
+          maxLength={64}
+          aria-label="New folder name"
+        />
+        <FolderColorPicker compact value={newFolderColor} onChange={setNewFolderColor} />
+        <button
+          type="submit"
+          disabled={creating || !newFolderName.trim()}
+          className="ableton-btn ableton-btn-primary shrink-0 px-4 disabled:opacity-60"
+        >
+          {creating ? "..." : "Create"}
+        </button>
+      </form>
+
+      {activeFolder ? (
+        <div className="flex flex-wrap items-center gap-2 border-t border-ableton-border pt-3">
+          <span className="text-[10px] uppercase tracking-[0.14em] text-ableton-muted">{activeFolder.name} colour</span>
+          <FolderColorPicker
+            compact
+            value={activeFolder.color}
+            onChange={(color) => onFolderColorChange(activeFolder.id, color)}
+          />
+        </div>
+      ) : null}
+
+      {error ? <p className="text-xs text-red-300">{error}</p> : null}
       {folders.length === 0 ? (
-        <p className="border-t border-ableton-border px-3 py-2 text-xs text-ableton-muted">
-          Create folders to organise read emails. After reading, file each message before opening the next one.
+        <p className="text-xs text-ableton-muted">
+          Add colour-coded folders for action routing. Same-sender auto-handle kicks in after 3 identical actions.
         </p>
       ) : null}
     </div>

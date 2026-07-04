@@ -1,6 +1,7 @@
 import { gmail_v1, google } from "googleapis";
 import { db } from "@/lib/db";
 import { decryptText, encryptText } from "@/lib/crypto";
+import { env } from "@/lib/env";
 
 export type GmailAuthContext = {
   prismaAccountId: string;
@@ -27,10 +28,7 @@ export async function createGmailClient(userId: string): Promise<{
     throw new Error("No Gmail account linked");
   }
 
-  const oauth2Client = new google.auth.OAuth2(
-    process.env.GOOGLE_CLIENT_ID,
-    process.env.GOOGLE_CLIENT_SECRET
-  );
+  const oauth2Client = new google.auth.OAuth2(env.googleClientId, env.googleClientSecret);
 
   oauth2Client.setCredentials({
     refresh_token: decryptText(account.encryptedRefresh),

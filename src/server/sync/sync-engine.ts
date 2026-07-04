@@ -1,9 +1,10 @@
 import { db } from "@/lib/db";
+import { env } from "@/lib/env";
 import { logger } from "@/lib/logger";
 import { createGmailClient } from "@/server/gmail/client";
 import { getMessageById } from "@/server/gmail/service";
 
-const DEFAULT_BATCH_SIZE = Number(process.env.SYNC_BATCH_SIZE ?? "50");
+const DEFAULT_BATCH_SIZE = env.syncBatchSize;
 
 async function runInitialSync(userId: string, accountId: string) {
   const { gmail } = await createGmailClient(userId);

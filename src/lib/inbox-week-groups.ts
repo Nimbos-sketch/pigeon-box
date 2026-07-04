@@ -6,6 +6,15 @@ export type InboxMessageForGrouping = {
   isUnread: boolean;
   internalDate: string | null;
   isNsfw?: boolean;
+  isPhishingRisk?: boolean;
+  obligationQueue?: "response" | "action";
+  accentColor?: string | null;
+  senderHint?: {
+    senderLabel: string;
+    preferredAction: string;
+    actionsUntilAuto: number;
+    autoApply: boolean;
+  } | null;
 };
 
 export type InboxWeekGroup = {
@@ -59,10 +68,16 @@ function formatWeekLabel(weekStart: Date, weekEnd: Date, now: Date): { label: st
 
 export function groupInboxMessagesByWeek(
   messages: InboxMessageForGrouping[],
-  options?: { weekOrder?: "newest" | "oldest"; messageOrder?: "newest" | "oldest" }
+  options?: {
+    weekOrder?: "newest" | "oldest";
+    messageOrder?: "newest" | "oldest";
+    /** When set, drives opened/unread counts instead of Gmail read state (triage mode). */
+    isCompleted?: (message: InboxMessageForGrouping) => boolean;
+  }
 ): InboxWeekGroup[] {
   const weekOrder = options?.weekOrder ?? "newest";
   const messageOrder = options?.messageOrder ?? "newest";
+  const isCompleted = options?.isCompleted ?? ((message) => !message.isUnread);
   const now = new Date();
   const buckets = new Map<string, InboxMessageForGrouping[]>();
 
@@ -84,7 +99,7 @@ export function groupInboxMessagesByWeek(
     });
 
     if (key === "unknown") {
-      const openedCount = sorted.filter((message) => !message.isUnread).length;
+      const openedCount = sorted.filter((message) => isCompleted(message)).length;
       groups.push({
         key,
         label: "No date",
@@ -102,7 +117,7 @@ export function groupInboxMessagesByWeek(
     const start = new Date(key);
     const end = endOfWeekSunday(start);
     const { label, rangeLabel } = formatWeekLabel(start, end, now);
-    const openedCount = sorted.filter((message) => !message.isUnread).length;
+    const openedCount = sorted.filter((message) => isCompleted(message)).length;
 
     groups.push({
       key,
@@ -134,6 +149,8 @@ export function findWeekGroupForMessage(
   return groups.find((group) => group.messages.some((message) => message.gmailId === messageId)) ?? null;
 }
 
-export function formatOpenedCount(opened: number, total: number): string {
-  return `${opened} of ${total} opened`;
+export function formatOpenedCount(opened: number, total: number, triage = false): string {
+  return triage
+    ? `${opened} of ${total} actioned`
+    : `${opened} of ${total} opened`;
 }

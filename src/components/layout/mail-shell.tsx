@@ -11,7 +11,7 @@ export function MailShell({ email, children }: { email: string; children: React.
             PB
           </div>
           <div>
-            <p className="text-[10px] uppercase tracking-[0.14em] text-ableton-muted">Live Session</p>
+            <p className="text-[10px] uppercase tracking-[0.14em] text-ableton-muted">Pigeon box</p>
             <p className="text-sm font-medium">{email}</p>
           </div>
         </div>

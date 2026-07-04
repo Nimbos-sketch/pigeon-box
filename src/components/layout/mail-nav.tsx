@@ -12,10 +12,16 @@ const links: { href: Route; label: string }[] = [
 
 export function MailNav() {
   const pathname = usePathname();
+  const onInbox = pathname === "/inbox" || pathname.startsWith("/inbox/");
 
   return (
-    <nav className="border-b border-ableton-border bg-ableton-surface px-4 py-2">
-      <div className="mx-auto flex max-w-7xl gap-2">
+    <nav
+      className={`border-b px-4 py-2 ${
+        onInbox ? "border-ableton-border/70 bg-ableton-pane2" : "border-ableton-border bg-ableton-surface"
+      }`}
+    >
+      <div className="mx-auto flex max-w-7xl items-center gap-2">
+        <p className="mr-2 hidden text-[10px] uppercase tracking-[0.14em] text-ableton-muted sm:block">App</p>
         {links.map((link) => {
           const active = pathname === link.href || pathname.startsWith(`${link.href}/`);
           return (

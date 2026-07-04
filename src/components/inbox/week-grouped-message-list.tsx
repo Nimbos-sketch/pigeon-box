@@ -1,6 +1,8 @@
 "use client";
 
+import type { ReactNode } from "react";
 import type { InboxWeekGroup } from "@/lib/inbox-week-groups";
+import type { ObligationQueue } from "@/lib/inbox-queues";
 import { WeekProgress } from "@/components/inbox/week-progress";
 
 type Message = InboxWeekGroup["messages"][number];
@@ -10,51 +12,63 @@ type WeekGroupedMessageListProps = {
   selectedId: string | null;
   expandedWeekKey: string | null;
   unlockedMessageId: string | null;
+  awaitingDispositionId?: string | null;
   triageEnabled: boolean;
   onWeekToggle: (weekKey: string) => void;
   onSelect: (messageId: string) => void;
   onQuickAction?: (action: "trash" | "spam", messageId: string) => void;
   weekSectionPrefix?: string;
+  footer?: ReactNode;
 };
+
+const GRID_COLS = 4;
+
+function padGridCells<T>(items: T[], columns: number): (T | null)[] {
+  const padded: (T | null)[] = [...items];
+  const remainder = padded.length % columns;
+  if (remainder !== 0) {
+    for (let i = 0; i < columns - remainder; i++) {
+      padded.push(null);
+    }
+  }
+  return padded;
+}
+
+function slotId(weekIndex: number, messageIndex: number): string {
+  return `${String.fromCharCode(65 + weekIndex)}${String(messageIndex + 1).padStart(2, "0")}`;
+}
 
 export function WeekGroupedMessageList({
   groups,
   selectedId,
   expandedWeekKey,
   unlockedMessageId,
+  awaitingDispositionId = null,
   triageEnabled,
   onWeekToggle,
   onSelect,
   onQuickAction,
-  weekSectionPrefix = "week-section"
+  weekSectionPrefix = "week-section",
+  footer
 }: WeekGroupedMessageListProps) {
   return (
-    <div className="space-y-2">
-      {groups.map((group) => {
+    <div className="pigeon-grid pigeon-grid-inbox">
+      {groups.map((group, weekIndex) => {
         const isExpanded = expandedWeekKey === group.key;
         const hasUnread = group.unreadCount > 0;
         const complete = group.openedCount === group.totalCount;
 
         return (
-          <div key={group.key} id={`${weekSectionPrefix}-${group.key}`} className="scroll-mt-3">
+          <div key={group.key} id={`${weekSectionPrefix}-${group.key}`} className="contents scroll-mt-3">
             <button
               type="button"
               onClick={() => onWeekToggle(group.key)}
               aria-expanded={isExpanded}
-              className={`w-full border p-3 text-left transition ${
-                isExpanded
-                  ? "border-ableton-orange bg-ableton-pane2"
-                  : hasUnread
-                    ? "border-ableton-orange/50 bg-ableton-pane hover:border-ableton-orange"
-                    : "border-ableton-border bg-ableton-pane hover:border-ableton-borderLight"
-              }`}
+              className="pigeon-cell pigeon-cell-week"
             >
-              <div className="mb-2 flex items-start justify-between gap-2">
+              <div className="flex flex-wrap items-start justify-between gap-2">
                 <div className="flex items-start gap-2">
-                  <span
-                    className={`mt-0.5 text-xs ${isExpanded ? "text-ableton-orange" : "text-ableton-muted"}`}
-                    aria-hidden
-                  >
+                  <span className="mt-0.5 text-xs text-ableton-muted" aria-hidden>
                     {isExpanded ? "▼" : "▶"}
                   </span>
                   <div>
@@ -63,26 +77,38 @@ export function WeekGroupedMessageList({
                   </div>
                 </div>
                 <div className="text-right">
-                  <p className="font-mono text-[10px] text-ableton-subtle">{group.totalCount} emails</p>
+                  <p className="pigeon-slot-id">ROW {String.fromCharCode(65 + weekIndex)}</p>
+                  <p className="font-mono text-[10px] text-ableton-subtle">{group.totalCount} cells</p>
                   <span
                     className={`text-[10px] font-semibold uppercase tracking-[0.12em] ${
-                      complete ? "text-ableton-lime" : "text-ableton-orange"
+                      complete ? "text-ableton-lime" : hasUnread ? "text-ableton-orange" : "text-ableton-muted"
                     }`}
                   >
-                    {complete ? "Done" : `${group.unreadCount} unread`}
+                    {complete ? "Done" : triageEnabled ? `${group.unreadCount} left` : `${group.unreadCount} unread`}
                   </span>
                 </div>
               </div>
-              <WeekProgress openedCount={group.openedCount} totalCount={group.totalCount} compact />
+              <div className="mt-2">
+                <WeekProgress
+                  openedCount={group.openedCount}
+                  totalCount={group.totalCount}
+                  compact
+                  triage={triageEnabled}
+                />
+              </div>
             </button>
 
-            {isExpanded ? (
-              <div className="mt-2 space-y-2 border-l-2 border-ableton-orange/40 pl-2">
-                {group.messages.map((message) => {
+            {isExpanded
+              ? padGridCells(group.messages, GRID_COLS).map((message, cellIndex) => {
+                  if (!message) {
+                    return <div key={`empty-${group.key}-${cellIndex}`} className="pigeon-cell pigeon-cell-empty" />;
+                  }
+
                   if (message.isNsfw) {
                     return (
-                      <NsfwMessageRow
+                      <NsfwMessageCell
                         key={message.gmailId}
+                        slot={slotId(weekIndex, cellIndex)}
                         message={message}
                         onTrash={() => onQuickAction?.("trash", message.gmailId)}
                         onSpam={() => onQuickAction?.("spam", message.gmailId)}
@@ -91,52 +117,57 @@ export function WeekGroupedMessageList({
                   }
 
                   const isLocked =
-                    triageEnabled && unlockedMessageId !== null && message.isUnread && message.gmailId !== unlockedMessageId;
-                  const isNext = triageEnabled && message.gmailId === unlockedMessageId;
-                  const needsFiling = triageEnabled && !message.isUnread;
+                    triageEnabled && unlockedMessageId !== null && message.gmailId !== unlockedMessageId;
+                  const needsDisposition =
+                    triageEnabled && awaitingDispositionId !== null && message.gmailId === awaitingDispositionId;
+                  const isNext =
+                    triageEnabled &&
+                    message.gmailId === unlockedMessageId &&
+                    message.gmailId !== awaitingDispositionId;
 
                   return (
-                    <MessageRow
+                    <MessageCell
                       key={message.gmailId}
+                      slot={slotId(weekIndex, cellIndex)}
                       message={message}
                       isSelected={message.gmailId === selectedId}
                       isLocked={isLocked}
                       isNext={isNext}
-                      needsFiling={needsFiling}
+                      needsDisposition={needsDisposition}
                       onSelect={onSelect}
                     />
                   );
-                })}
-              </div>
-            ) : null}
+                })
+              : null}
           </div>
         );
       })}
+      {footer ? <div className="contents">{footer}</div> : null}
     </div>
   );
 }
 
-function NsfwMessageRow({
+function NsfwMessageCell({
+  slot,
   message,
   onTrash,
   onSpam
 }: {
+  slot: string;
   message: Message;
   onTrash?: () => void;
   onSpam?: () => void;
 }) {
   return (
-    <div className="w-full border border-red-900/50 bg-red-950/20 p-3">
-      <div className="mb-2 flex items-center gap-2">
-        <span className="shrink-0 text-[10px] font-semibold uppercase tracking-[0.12em] text-red-300">Blocked</span>
-        <p className="truncate text-sm font-medium text-ableton-muted">{message.subject ?? "Content blocked"}</p>
-      </div>
-      <p className="text-xs text-ableton-muted">{message.snippet ?? "Hidden by NSFW filter"}</p>
-      <div className="mt-3 flex gap-2">
-        <button type="button" className="ableton-btn text-xs" onClick={onTrash}>
+    <div className="pigeon-cell border border-red-900/50 bg-red-950/30">
+      <p className="pigeon-slot-id">{slot}</p>
+      <p className="mt-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-red-300">Blocked</p>
+      <p className="mt-1 line-clamp-2 text-xs text-ableton-muted">{message.subject ?? "Content blocked"}</p>
+      <div className="mt-2 flex gap-1">
+        <button type="button" className="ableton-btn px-2 py-1 text-[10px]" onClick={onTrash}>
           Trash
         </button>
-        <button type="button" className="ableton-btn text-xs border-red-800 text-red-300" onClick={onSpam}>
+        <button type="button" className="ableton-btn border-red-800 px-2 py-1 text-[10px] text-red-300" onClick={onSpam}>
           Spam
         </button>
       </div>
@@ -144,72 +175,65 @@ function NsfwMessageRow({
   );
 }
 
-function MessageRow({
+function MessageCell({
+  slot,
   message,
   isSelected,
   isLocked,
   isNext,
-  needsFiling,
+  needsDisposition,
   onSelect
 }: {
+  slot: string;
   message: Message;
   isSelected: boolean;
   isLocked: boolean;
   isNext: boolean;
-  needsFiling: boolean;
+  needsDisposition: boolean;
   onSelect: (messageId: string) => void;
 }) {
+  const queue: ObligationQueue = message.obligationQueue ?? "action";
+  const queueLabel = queue === "response" ? "R" : "A";
+
   return (
     <button
       type="button"
       disabled={isLocked}
       onClick={() => onSelect(message.gmailId)}
-      title={isLocked ? "Open the oldest unread email in your inbox first" : undefined}
-      className={`w-full border p-3 text-left transition ${
-        isLocked
-          ? "cursor-not-allowed border-ableton-border/60 bg-ableton-surface/50 opacity-55"
-          : isSelected
-            ? "border-ableton-orange bg-ableton-pane2"
-            : isNext
-              ? "border-ableton-orange/70 bg-ableton-surface hover:border-ableton-orange"
-              : "border-ableton-border bg-ableton-surface hover:border-ableton-borderLight"
+      title={isLocked ? "Finish the current cell before opening another" : undefined}
+      style={message.accentColor ? { borderTopWidth: 3, borderTopColor: message.accentColor } : undefined}
+      className={`pigeon-cell flex flex-col ${
+        isLocked ? "pigeon-cell-locked" : isSelected ? "pigeon-cell-selected" : isNext ? "pigeon-cell-next" : ""
       }`}
     >
-      <div className="mb-1 flex items-center gap-2">
-        {isLocked ? (
-          <span className="shrink-0 text-[10px] text-ableton-muted" title="Locked">
-            🔒
+      <div className="flex items-center justify-between gap-1">
+        <span className="pigeon-slot-id">{slot}</span>
+        <span className="flex items-center gap-1">
+          {isLocked ? (
+            <span className="text-[10px] text-ableton-muted">🔒</span>
+          ) : message.isUnread ? (
+            <span className="h-1.5 w-1.5 bg-ableton-lime" title="Unread" />
+          ) : (
+            <span className="h-1.5 w-1.5 bg-ableton-muted" title="Opened" />
+          )}
+          <span
+            className={`text-[9px] font-bold ${queue === "response" ? "text-sky-300" : "text-ableton-lime"}`}
+            title={queue === "response" ? "Respond" : "Action"}
+          >
+            {queueLabel}
           </span>
-        ) : message.isUnread ? (
-          <span className="h-2 w-2 shrink-0 bg-ableton-lime" title="Unread" />
-        ) : (
-          <span className="h-2 w-2 shrink-0 bg-ableton-muted" title="Opened" />
-        )}
-        <p className={`truncate text-sm font-medium ${isLocked ? "text-ableton-muted" : "text-ableton-text"}`}>
-          {message.subject ?? "(No subject)"}
-        </p>
-        {isNext ? (
-          <span className="ml-auto shrink-0 text-[9px] font-semibold uppercase tracking-[0.12em] text-ableton-orange">
-            {message.isUnread ? "Up next" : "File me"}
-          </span>
-        ) : needsFiling ? (
-          <span className="ml-auto shrink-0 text-[9px] font-semibold uppercase tracking-[0.12em] text-ableton-lime">
-            Read · file
-          </span>
-        ) : null}
+        </span>
       </div>
-      <p className="truncate text-xs text-ableton-muted">{message.fromAddress ?? "Unknown sender"}</p>
-      <p className="truncate text-xs text-ableton-subtle">{message.snippet ?? ""}</p>
-      {message.internalDate ? (
-        <p className="mt-1 font-mono text-[10px] text-ableton-orange">
-          {new Date(message.internalDate).toLocaleString(undefined, {
-            weekday: "short",
-            month: "short",
-            day: "numeric",
-            hour: "numeric",
-            minute: "2-digit"
-          })}
-        </p>
+      <p className={`mt-1 line-clamp-2 text-xs font-medium leading-snug ${isLocked ? "text-ableton-muted" : "text-ableton-text"}`}>
+        {message.subject ?? "(No subject)"}
+      </p>
+      <p className="mt-auto truncate pt-1 text-[10px] text-ableton-muted">{message.fromAddress ?? "Unknown"}</p>
+      {isNext ? (
+        <p className="mt-1 text-[9px] font-semibold uppercase tracking-[0.1em] text-ableton-orange">Next</p>
+      ) : needsDisposition ? (
+        <p className="mt-1 text-[9px] font-semibold uppercase tracking-[0.1em] text-ableton-orange">Action needed</p>
+      ) : message.isPhishingRisk ? (
+        <p className="mt-1 text-[9px] font-semibold uppercase text-amber-300">Phishing?</p>
       ) : null}
     </button>
   );

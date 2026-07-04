@@ -1,7 +1,8 @@
 import { createCipheriv, createDecipheriv, randomBytes, createHash } from "crypto";
+import { env } from "@/lib/env";
 
 function getKey(): Buffer {
-  const keyInput = process.env.TOKEN_ENCRYPTION_KEY;
+  const keyInput = env.tokenEncryptionKey;
   if (!keyInput) {
     throw new Error("TOKEN_ENCRYPTION_KEY is not set");
   }

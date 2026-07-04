@@ -32,7 +32,13 @@ npm run dev
 
 ## Security notes
 
+- All secrets live in `.env` only — never commit `.env` or `prisma/*.db`.
 - OAuth tokens are encrypted at rest (`TOKEN_ENCRYPTION_KEY` required).
+- Plaintext OAuth tokens are cleared from the auth `Account` table after sign-in.
+- AI overview is **off by default** (`AI_OVERVIEW_ENABLED=false`). Email snippets are only sent to OpenAI when you explicitly enable it.
+- API errors return generic messages in production so internal details are not leaked.
+- Logs redact tokens, passwords, and other sensitive fields automatically.
+- Phishing-risk emails are flagged with a warning — do not click links in suspicious messages.
 - Scope is restricted to user profile plus Gmail read/modify APIs.
 - Session persistence uses database-backed sessions.
 

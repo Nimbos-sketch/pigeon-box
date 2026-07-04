@@ -1,15 +1,30 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { AiOverview } from "@/components/inbox/ai-overview";
+import { InboxModuleTabs } from "@/components/inbox/inbox-module-tabs";
+import { ModulePanel } from "@/components/inbox/module-panel";
+import { DispositionChooser } from "@/components/inbox/disposition-chooser";
+import { FolderBins } from "@/components/inbox/folder-bins";
+import { ObligationQueueBanner } from "@/components/inbox/obligation-queue-banner";
+import { PigeonWorkspace } from "@/components/inbox/pigeon-workspace";
+import { PhishingWarningBanner } from "@/components/inbox/phishing-warning-banner";
 import { NsfwBlockedPanel } from "@/components/inbox/nsfw-blocked-panel";
+import { RespondPanel } from "@/components/inbox/respond-panel";
 import { MailboxNav } from "@/components/inbox/mailbox-nav";
 import { FileToFolder } from "@/components/inbox/file-to-folder";
 import { FolderManager, type EmailFolder } from "@/components/inbox/folder-manager";
-import { InboxTriageBanner } from "@/components/inbox/inbox-triage-banner";
 import { WeekGroupedMessageList } from "@/components/inbox/week-grouped-message-list";
 import { WeekInboxDigest } from "@/components/inbox/week-inbox-digest";
 import { WeekProgress } from "@/components/inbox/week-progress";
+import { SmartHandlingBanner } from "@/components/inbox/smart-handling-banner";
+import { TeamPigeonHoles } from "@/components/inbox/team-pigeon-holes";
+import { formatSenderRuleNotice } from "@/lib/sender-rule-notice";
+import { DEFAULT_FOLDER_COLOR } from "@/lib/folder-colors";
+import type { AutoHandledSummary } from "@/server/sender-rules/service";
+import type { ActiveDisposition, DispositionMode, QuickReplyTemplate } from "@/lib/inbox-disposition";
+import { countByQueue, type ObligationQueue } from "@/lib/inbox-queues";
 import { findWeekGroupForMessage, groupInboxMessagesByWeek } from "@/lib/inbox-week-groups";
 import {
   canFileMessage,
@@ -20,6 +35,12 @@ import {
   isTriageMailbox
 } from "@/lib/inbox-triage";
 import { getOverviewFilter, type OverviewFilterId } from "@/lib/overview-filters";
+import {
+  DEFAULT_ACTIVE_MODULE,
+  loadActiveModuleId,
+  saveActiveModuleId,
+  type InboxModuleId
+} from "@/lib/inbox-layout-prefs";
 import {
   actionRemovesFromView,
   getMailboxActions,
@@ -36,6 +57,15 @@ type Message = {
   isUnread: boolean;
   internalDate: string | null;
   isNsfw?: boolean;
+  isPhishingRisk?: boolean;
+  obligationQueue?: ObligationQueue;
+  accentColor?: string | null;
+  senderHint?: {
+    senderLabel: string;
+    preferredAction: string;
+    actionsUntilAuto: number;
+    autoApply: boolean;
+  } | null;
 };
 
 type Label = {
@@ -74,6 +104,8 @@ function mergeMessages(current: Message[], incoming: Message[]): Message[] {
 }
 
 export function InboxClient() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const [messages, setMessages] = useState<Message[]>([]);
   const [labels, setLabels] = useState<Label[]>([]);
   const [folders, setFolders] = useState<EmailFolder[]>([]);
@@ -91,10 +123,17 @@ export function InboxClient() {
   const [totalEstimate, setTotalEstimate] = useState<number | null>(null);
   const [summaryFilter, setSummaryFilter] = useState<OverviewFilterId>("all");
   const [expandedWeekKey, setExpandedWeekKey] = useState<string | null>(null);
+  const [awaitingDispositionId, setAwaitingDispositionId] = useState<string | null>(null);
+  const [dispositionedMessageIds, setDispositionedMessageIds] = useState<Set<string>>(() => new Set());
   const [openedMessageIds, setOpenedMessageIds] = useState<Set<string>>(() => new Set());
   const [triageNotice, setTriageNotice] = useState<string | null>(null);
+  const [activeDisposition, setActiveDisposition] = useState<ActiveDisposition | null>(null);
+  const [sendingQuickReply, setSendingQuickReply] = useState(false);
+  const [autoHandled, setAutoHandled] = useState<AutoHandledSummary[]>([]);
+  const [activeModuleId, setActiveModuleId] = useState<InboxModuleId>(DEFAULT_ACTIVE_MODULE);
 
   const triageEnabled = isTriageMailbox(activeMailbox) && viewingFolderId === null;
+  const activeDispositionId = activeDisposition?.messageId ?? null;
   const viewingFolder = folders.find((folder) => folder.id === viewingFolderId) ?? null;
 
   const selected = useMemo(
@@ -104,25 +143,41 @@ export function InboxClient() {
 
   const activeMailboxView = useMemo(() => getMailboxView(activeMailbox), [activeMailbox]);
   const mailboxActions = useMemo(() => getMailboxActions(activeMailbox), [activeMailbox]);
+  const triageQueueOptions = useMemo(
+    () => ({
+      awaitingDispositionId,
+      activeDispositionId,
+      dispositionedIds: dispositionedMessageIds
+    }),
+    [awaitingDispositionId, activeDispositionId, dispositionedMessageIds]
+  );
   const weekGroups = useMemo(
     () =>
       groupInboxMessagesByWeek(messages, {
         weekOrder: triageEnabled ? "oldest" : "newest",
-        messageOrder: triageEnabled ? "oldest" : "newest"
+        messageOrder: triageEnabled ? "oldest" : "newest",
+        isCompleted: triageEnabled
+          ? (message) => dispositionedMessageIds.has(message.gmailId)
+          : undefined
       }),
-    [messages, triageEnabled]
+    [messages, triageEnabled, dispositionedMessageIds]
   );
   const unlockedMessageId = useMemo(
-    () => (triageEnabled ? getUnlockedMessageId(messages) : null),
-    [messages, triageEnabled]
+    () => (triageEnabled ? getUnlockedMessageId(messages, triageQueueOptions) : null),
+    [messages, triageEnabled, triageQueueOptions]
   );
   const unlockedMessage = useMemo(
     () => messages.find((message) => message.gmailId === unlockedMessageId) ?? null,
     [messages, unlockedMessageId]
   );
   const lockedMessageCount = useMemo(
-    () => (triageEnabled ? countLockedMessages(messages) : 0),
-    [messages, triageEnabled]
+    () => (triageEnabled ? countLockedMessages(messages, triageQueueOptions) : 0),
+    [messages, triageEnabled, triageQueueOptions]
+  );
+  const queueCounts = useMemo(() => countByQueue(messages), [messages]);
+  const unlockedQueue = useMemo(
+    () => unlockedMessage?.obligationQueue ?? null,
+    [unlockedMessage]
   );
   const nsfwCount = useMemo(() => messages.filter((message) => message.isNsfw).length, [messages]);
   const canFileSelected = useMemo(() => {
@@ -141,27 +196,111 @@ export function InboxClient() {
     }
     return mailboxActions;
   }, [mailboxActions, triageEnabled]);
+  const showDispositionFlow =
+    triageEnabled &&
+    selected &&
+    !selected.isNsfw &&
+    openedMessageIds.has(selected.gmailId);
+
+  const dispositionModeForSelected =
+    activeDisposition && activeDisposition.messageId === selected?.gmailId
+      ? activeDisposition.mode
+      : null;
+
   const selectedWeekGroup = useMemo(
     () => findWeekGroupForMessage(weekGroups, selectedId),
     [weekGroups, selectedId]
   );
 
-  function focusUnlockedMessage(messageList: Message[]) {
+  function markDispositioned(messageId: string) {
+    setDispositionedMessageIds((current) => {
+      const next = new Set(current);
+      next.add(messageId);
+      return next;
+    });
+  }
+
+  function clearDisposition() {
+    setActiveDisposition(null);
+  }
+
+  async function finishDisposition(messageId: string, action: MessageAction = "archive") {
+    markDispositioned(messageId);
+    setAwaitingDispositionId(null);
+    clearDisposition();
+    await applyAction(action, messageId);
+  }
+
+  function advanceTriageQueueAfterDisposition(messageList: Message[], dispositionedId?: string) {
     if (!triageEnabled) {
       return;
     }
-    const nextId = getUnlockedMessageId(messageList);
-    if (!nextId) {
-      setSelectedId(null);
+    setSelectedId(null);
+    setAwaitingDispositionId(null);
+    clearDisposition();
+    if (dispositionedId) {
+      setOpenedMessageIds((current) => {
+        const next = new Set(current);
+        next.delete(dispositionedId);
+        return next;
+      });
+    }
+    const dispositioned = new Set(dispositionedMessageIds);
+    if (dispositionedId) {
+      dispositioned.add(dispositionedId);
+    }
+    const nextUnlocked = getUnlockedMessageId(messageList, {
+      awaitingDispositionId: null,
+      activeDispositionId: null,
+      dispositionedIds: dispositioned
+    });
+    if (nextUnlocked) {
+      const week = findWeekGroupForMessage(
+        groupInboxMessagesByWeek(messageList, {
+          weekOrder: "oldest",
+          messageOrder: "oldest",
+          isCompleted: (message) => dispositioned.has(message.gmailId)
+        }),
+        nextUnlocked
+      );
+      if (week) {
+        setExpandedWeekKey(week.key);
+      }
+    }
+  }
+
+  function handleChooseDisposition(mode: DispositionMode) {
+    if (!selected) {
       return;
     }
-    setSelectedId(nextId);
-    const week = findWeekGroupForMessage(
-      groupInboxMessagesByWeek(messageList, { weekOrder: "oldest", messageOrder: "oldest" }),
-      nextId
-    );
-    if (week) {
-      setExpandedWeekKey(week.key);
+    if (mode === "fyi") {
+      setActiveDisposition({ messageId: selected.gmailId, mode: "fyi" });
+      void finishDisposition(selected.gmailId, "archive");
+      return;
+    }
+    setActiveDisposition({ messageId: selected.gmailId, mode });
+  }
+
+  async function handleQuickReply(template: QuickReplyTemplate) {
+    if (!selected) {
+      return;
+    }
+    setSendingQuickReply(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/messages/${selected.gmailId}/quick-reply`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ template })
+      });
+      if (!res.ok) {
+        throw new Error("Failed to send quick reply");
+      }
+      await finishDisposition(selected.gmailId, "archive");
+    } catch {
+      setError("Could not send quick reply");
+    } finally {
+      setSendingQuickReply(false);
     }
   }
 
@@ -184,29 +323,37 @@ export function InboxClient() {
       return;
     }
 
-    if (triageEnabled && isMessageLocked(messageId, messages)) {
-      setTriageNotice("Open the oldest unread email first. Already-read emails can be opened to file them.");
-      focusUnlockedMessage(messages);
+    if (triageEnabled && isMessageLocked(messageId, messages, triageQueueOptions)) {
+      setTriageNotice(
+        awaitingDispositionId || activeDispositionId
+          ? "Finish responding or actioning the current email before opening another."
+          : "Work through the queue in order — open and action the highlighted cell first."
+      );
       return;
     }
 
     setTriageNotice(null);
+    if (activeDisposition?.messageId !== messageId) {
+      setActiveDisposition(null);
+    }
     const week = findWeekGroupForMessage(weekGroups, messageId);
     if (week) {
       setExpandedWeekKey(week.key);
     }
     setSelectedId(messageId);
+    setAwaitingDispositionId(messageId);
+    selectModule("inbox");
     setOpenedMessageIds((current) => {
       const next = new Set(current);
       next.add(messageId);
       return next;
     });
-    if (message?.isUnread) {
-      void applyAction("read", messageId);
-    }
   }
 
   function handleQuickAction(action: "trash" | "spam", messageId: string) {
+    markDispositioned(messageId);
+    setAwaitingDispositionId(null);
+    clearDisposition();
     void applyAction(action, messageId);
   }
 
@@ -257,7 +404,11 @@ export function InboxClient() {
       }
 
       const messagesJson = await messagesRes.json();
-      const incoming: Message[] = messagesJson.messages ?? [];
+      const incoming: Message[] = (messagesJson.messages ?? []).map((message: Message) => ({
+        ...message,
+        accentColor: message.accentColor ?? null
+      }));
+      const handled: AutoHandledSummary[] = messagesJson.autoHandled ?? [];
       let nextMessages = incoming;
 
       setMessages((current) => {
@@ -267,11 +418,15 @@ export function InboxClient() {
 
       setNextPageToken(messagesJson.nextPageToken ?? null);
       setTotalEstimate(messagesJson.resultSizeEstimate ?? null);
+      setAutoHandled((current) => (isLoadMore ? [...current, ...handled] : handled));
 
       if (!isLoadMore) {
         setExpandedWeekKey(null);
         setOpenedMessageIds(new Set());
+        setAwaitingDispositionId(null);
+        setDispositionedMessageIds(new Set());
         setTriageNotice(null);
+        setActiveDisposition(null);
 
         const [labelsRes, foldersRes] = await Promise.all([
           fetch("/api/labels"),
@@ -285,14 +440,20 @@ export function InboxClient() {
 
         if (foldersRes.ok) {
           const foldersJson = await foldersRes.json();
-          setFolders(foldersJson.folders ?? []);
+          setFolders(
+            (foldersJson.folders ?? []).map((folder: EmailFolder) => ({
+              ...folder,
+              color: folder.color ?? DEFAULT_FOLDER_COLOR
+            }))
+          );
         } else {
           setFolders([]);
         }
       }
 
       if (triageEnabled) {
-        focusUnlockedMessage(nextMessages);
+        setSelectedId(null);
+        setAwaitingDispositionId(null);
       } else if (!isLoadMore) {
         setSelectedId(nextMessages[0]?.gmailId ?? null);
       }
@@ -335,6 +496,15 @@ export function InboxClient() {
       if (!res.ok) {
         throw new Error("Failed to file message");
       }
+      const body = (await res.json()) as { senderRule?: Parameters<typeof formatSenderRuleNotice>[0] };
+      const learned = formatSenderRuleNotice(body.senderRule);
+      if (learned) {
+        setTriageNotice(learned);
+      }
+
+      if (triageEnabled) {
+        markDispositioned(messageId);
+      }
 
       setMessages((current) => {
         const next = current.filter((msg) => msg.gmailId !== messageId);
@@ -343,8 +513,9 @@ export function InboxClient() {
           updated.delete(messageId);
           return updated;
         });
+        clearDisposition();
         if (triageEnabled) {
-          focusUnlockedMessage(next);
+          advanceTriageQueueAfterDisposition(next, messageId);
         } else if (selectedId === messageId) {
           setSelectedId(next[0]?.gmailId ?? null);
         }
@@ -364,9 +535,19 @@ export function InboxClient() {
   async function applyAction(action: MessageAction, messageId: string) {
     const requiresReadFirst =
       triageEnabled && (action === "archive" || action === "trash" || action === "spam");
-    if (requiresReadFirst && !canFileMessage(messageId, messages, openedMessageIds)) {
-      setTriageNotice("Open this email first, then file it into a folder.");
+    if (requiresReadFirst && !openedMessageIds.has(messageId)) {
+      setTriageNotice("Open this email first, then choose an action.");
       return;
+    }
+
+    if (
+      triageEnabled &&
+      (action === "archive" || action === "trash" || action === "spam") &&
+      messageId === awaitingDispositionId
+    ) {
+      markDispositioned(messageId);
+      setAwaitingDispositionId(null);
+      clearDisposition();
     }
 
     const previous = messages;
@@ -395,6 +576,12 @@ export function InboxClient() {
         throw new Error("Failed to update message");
       }
 
+      const body = (await res.json()) as { senderRule?: Parameters<typeof formatSenderRuleNotice>[0] };
+      const learned = formatSenderRuleNotice(body.senderRule);
+      if (learned) {
+        setTriageNotice(learned);
+      }
+
       if (actionRemovesFromView(action, activeMailbox)) {
         setMessages((current) => {
           const next = current.filter((msg) => msg.gmailId !== messageId);
@@ -404,7 +591,7 @@ export function InboxClient() {
               updated.delete(messageId);
               return updated;
             });
-            focusUnlockedMessage(next);
+            advanceTriageQueueAfterDisposition(next, messageId);
           } else if (selectedId === messageId) {
             setSelectedId(next[0]?.gmailId ?? null);
           }
@@ -449,6 +636,25 @@ export function InboxClient() {
     void loadInbox({ labelId: folder.gmailLabelId });
   }
 
+  async function handleFolderColorChange(folderId: string, color: string) {
+    try {
+      const res = await fetch(`/api/folders/${folderId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ color })
+      });
+      if (!res.ok) {
+        throw new Error("Failed to update folder colour");
+      }
+      const data = (await res.json()) as { folder: EmailFolder };
+      setFolders((current) =>
+        current.map((folder) => (folder.id === folderId ? data.folder : folder))
+      );
+    } catch {
+      setError("Could not update folder colour");
+    }
+  }
+
   function handleSummaryFilterChange(filterId: OverviewFilterId) {
     setViewingFolderId(null);
     setSummaryFilter(filterId);
@@ -467,10 +673,92 @@ export function InboxClient() {
     if (!triageEnabled || !selectedId) {
       return;
     }
-    if (isMessageLocked(selectedId, messages)) {
-      focusUnlockedMessage(messages);
+    if (isMessageLocked(selectedId, messages, triageQueueOptions)) {
+      setSelectedId(null);
     }
-  }, [messages, selectedId, triageEnabled]);
+  }, [messages, selectedId, triageEnabled, triageQueueOptions]);
+
+  useEffect(() => {
+    const respondedId = searchParams.get("responded");
+    if (!respondedId) {
+      return;
+    }
+    void finishDisposition(respondedId, "archive");
+    router.replace("/inbox");
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- handle compose return once
+  }, [searchParams]);
+
+  const activeOverviewFilter = useMemo(() => getOverviewFilter(summaryFilter), [summaryFilter]);
+  const folderSummary = viewingFolder ? viewingFolder.name : "Inbox";
+
+  const showQueue = autoHandled.length > 0 || (triageEnabled && messages.length > 0);
+
+  const visibleModuleIds = useMemo(() => {
+    const ids: InboxModuleId[] = ["overview", "transport", "folders", "mailboxes"];
+    if (showQueue) {
+      ids.push("queue");
+    }
+    ids.push("teamHoles", "inbox");
+    return ids;
+  }, [showQueue]);
+
+  const moduleSummaries = useMemo(
+    () => ({
+      overview: activeOverviewFilter.label,
+      transport: `${messages.length} tracks`,
+      folders: `${folders.length} · ${folderSummary}`,
+      mailboxes: activeMailboxView.label,
+      queue: triageEnabled
+        ? `${queueCounts.response} respond · ${queueCounts.action} action`
+        : `${autoHandled.length} auto-handled`,
+      teamHoles: "Team grid",
+      inbox: selected?.subject ?? "Grid · workspace"
+    }),
+    [
+      activeOverviewFilter.label,
+      messages.length,
+      folders.length,
+      folderSummary,
+      activeMailboxView.label,
+      triageEnabled,
+      queueCounts.response,
+      queueCounts.action,
+      autoHandled.length,
+      selected?.subject
+    ]
+  );
+
+  function selectModule(id: InboxModuleId) {
+    setActiveModuleId(id);
+    saveActiveModuleId(id);
+  }
+
+  function cycleModule(direction: -1 | 1) {
+    const index = visibleModuleIds.indexOf(activeModuleId);
+    if (index === -1) {
+      selectModule(visibleModuleIds[0] ?? DEFAULT_ACTIVE_MODULE);
+      return;
+    }
+    const nextIndex = (index + direction + visibleModuleIds.length) % visibleModuleIds.length;
+    selectModule(visibleModuleIds[nextIndex] ?? DEFAULT_ACTIVE_MODULE);
+  }
+
+  function minimizeActiveModule() {
+    if (activeModuleId !== "inbox") {
+      selectModule("inbox");
+    }
+  }
+
+  useEffect(() => {
+    setActiveModuleId(loadActiveModuleId());
+  }, []);
+
+  useEffect(() => {
+    if (!visibleModuleIds.includes(activeModuleId)) {
+      selectModule("inbox");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- keep active tab valid when queue visibility changes
+  }, [visibleModuleIds, activeModuleId]);
 
   useEffect(() => {
     if (selected?.isNsfw) {
@@ -479,143 +767,195 @@ export function InboxClient() {
   }, [selected]);
 
   return (
-    <main className="mx-auto max-w-7xl p-4">
-      <AiOverview
-        selectedFilter={summaryFilter}
-        onFilterChange={handleSummaryFilterChange}
-        onSelectMessage={handleSelectMessage}
+    <>
+      <InboxModuleTabs
+        activeId={activeModuleId}
+        visibleIds={visibleModuleIds}
+        summaries={moduleSummaries}
+        onSelect={selectModule}
+        onCycle={cycleModule}
+        onFocusInbox={() => selectModule("inbox")}
       />
 
-      <div className="ableton-panel mb-4">
-        <div className="ableton-panel-header">
-          Transport · {viewingFolder ? viewingFolder.name : activeMailboxView.label}
-        </div>
-        <div className="flex flex-col gap-4 p-4 lg:flex-row lg:items-end lg:justify-between">
-          <div>
-            <h1 className="text-xl font-semibold">{viewingFolder ? viewingFolder.name : activeMailboxView.label}</h1>
-            <p className="mt-1 font-mono text-[11px] text-ableton-muted">
-              TRACKS {messages.length}
-              {totalEstimate !== null ? ` / ~${totalEstimate}` : ""}
-              {folders.length > 0 ? ` · ${folders.length} folders` : ""}
-              {nsfwCount > 0 ? ` · ${nsfwCount} blocked` : ""}
-            </p>
-          </div>
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              setUseLabelFilter(false);
-              void loadInbox({ query: search, labelId: null });
-            }}
-            className="flex w-full max-w-xl gap-2"
-          >
-            <input
-              className="ableton-input flex-1"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Gmail query..."
-            />
-            <button className="ableton-btn ableton-btn-primary px-5" type="submit">
-              Search
-            </button>
-          </form>
-        </div>
-      </div>
+      <main className="mx-auto max-w-7xl p-4">
+        {error ? (
+          <p className="mb-4 border border-red-800 bg-red-950/40 p-3 text-sm text-red-300">{error}</p>
+        ) : null}
 
-      <FolderManager
-        folders={folders}
-        selectedFolderId={viewingFolderId}
-        onFolderViewChange={handleFolderViewChange}
-        onFolderCreated={(folder) => {
-          setFolders((current) => [...current, folder].sort((a, b) => a.name.localeCompare(b.name)));
-          setFileTargetFolderId(folder.id);
-        }}
-      />
-
-      <MailboxNav activeMailbox={activeMailbox} onMailboxChange={handleMailboxChange} />
-
-      {error ? (
-        <p className="mb-4 border border-red-800 bg-red-950/40 p-3 text-sm text-red-300">{error}</p>
-      ) : null}
-
-      {triageNotice ? (
-        <p className="mb-4 border border-ableton-orange/60 bg-ableton-pane2 p-3 text-sm text-ableton-text">{triageNotice}</p>
-      ) : null}
-
-      {triageEnabled && messages.length > 0 ? (
-        <InboxTriageBanner
-          lockedCount={lockedMessageCount}
-          unlockedSubject={unlockedMessage?.subject ?? null}
-        />
-      ) : null}
-
-      <div className="grid min-h-[600px] grid-cols-1 gap-3 lg:grid-cols-[380px_1fr]">
-        <section className="ableton-panel">
-          <div className="ableton-panel-header">Session View · By week</div>
-          <p className="border-b border-ableton-border px-3 py-2 text-xs text-ableton-muted">
-            {triageEnabled
-              ? "Open oldest unread first · read emails stay open so you can file them"
-              : viewingFolderId
-                ? `Viewing folder · ${viewingFolder?.name ?? ""}`
-                : "Click a week to expand its emails"}
+        {triageNotice ? (
+          <p className="mb-4 border border-ableton-orange/60 bg-ableton-pane2 p-3 text-sm text-ableton-text">
+            {triageNotice}
           </p>
-          <div className="max-h-[640px] overflow-y-auto p-2">
-            {loading ? (
-              <p className="p-3 text-sm text-ableton-muted">Loading messages...</p>
-            ) : messages.length === 0 ? (
-              <p className="p-3 text-sm text-ableton-muted">No messages found.</p>
-            ) : (
-              <>
-                <WeekGroupedMessageList
-                  groups={weekGroups}
-                  selectedId={selectedId}
-                  expandedWeekKey={expandedWeekKey}
-                  unlockedMessageId={unlockedMessageId}
-                  triageEnabled={triageEnabled}
-                  onWeekToggle={handleWeekToggle}
-                  onSelect={handleSelectMessage}
-                  onQuickAction={handleQuickAction}
+        ) : null}
+
+        {activeModuleId === "overview" ? (
+          <ModulePanel
+            title="AI Overview"
+            summary={moduleSummaries.overview}
+            onMinimize={minimizeActiveModule}
+          >
+            <AiOverview
+              selectedFilter={summaryFilter}
+              onFilterChange={handleSummaryFilterChange}
+              onSelectMessage={handleSelectMessage}
+            />
+          </ModulePanel>
+        ) : null}
+
+        {activeModuleId === "transport" ? (
+          <ModulePanel
+            title={`Transport · ${viewingFolder ? viewingFolder.name : activeMailboxView.label}`}
+            summary={moduleSummaries.transport}
+            onMinimize={minimizeActiveModule}
+          >
+            <div className="flex flex-col gap-4 p-4 lg:flex-row lg:items-end lg:justify-between">
+              <div>
+                <h1 className="text-xl font-semibold">
+                  {viewingFolder ? viewingFolder.name : activeMailboxView.label}
+                </h1>
+                <p className="mt-1 font-mono text-[11px] text-ableton-muted">
+                  TRACKS {messages.length}
+                  {totalEstimate !== null ? ` / ~${totalEstimate}` : ""}
+                  {folders.length > 0 ? ` · ${folders.length} folders` : ""}
+                  {nsfwCount > 0 ? ` · ${nsfwCount} blocked` : ""}
+                </p>
+              </div>
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  setUseLabelFilter(false);
+                  void loadInbox({ query: search, labelId: null });
+                }}
+                className="flex w-full max-w-xl gap-2"
+              >
+                <input
+                  className="ableton-input flex-1"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="Gmail query..."
                 />
-                {nextPageToken ? (
+                <button className="ableton-btn ableton-btn-primary px-5" type="submit">
+                  Search
+                </button>
+              </form>
+            </div>
+          </ModulePanel>
+        ) : null}
+
+        {activeModuleId === "folders" ? (
+          <ModulePanel title="Folders" summary={moduleSummaries.folders} onMinimize={minimizeActiveModule}>
+            <FolderManager
+              folders={folders}
+              selectedFolderId={viewingFolderId}
+              onFolderViewChange={handleFolderViewChange}
+              onFolderCreated={(folder) => {
+                setFolders((current) => [...current, folder].sort((a, b) => a.name.localeCompare(b.name)));
+                setFileTargetFolderId(folder.id);
+                selectModule("folders");
+              }}
+              onFolderColorChange={handleFolderColorChange}
+            />
+          </ModulePanel>
+        ) : null}
+
+        {activeModuleId === "mailboxes" ? (
+          <ModulePanel title="Mailboxes" summary={moduleSummaries.mailboxes} onMinimize={minimizeActiveModule}>
+            <MailboxNav activeMailbox={activeMailbox} onMailboxChange={handleMailboxChange} />
+          </ModulePanel>
+        ) : null}
+
+        {activeModuleId === "queue" && showQueue ? (
+          <ModulePanel title="Queue & alerts" summary={moduleSummaries.queue} onMinimize={minimizeActiveModule}>
+            <div className="space-y-3 p-3">
+              <SmartHandlingBanner autoHandled={autoHandled} onDismiss={() => setAutoHandled([])} />
+              {triageEnabled && messages.length > 0 ? (
+                <ObligationQueueBanner
+                  responseCount={queueCounts.response}
+                  actionCount={queueCounts.action}
+                  lockedCount={lockedMessageCount}
+                  unlockedSubject={unlockedMessage?.subject ?? null}
+                  unlockedQueue={unlockedQueue}
+                />
+              ) : null}
+            </div>
+          </ModulePanel>
+        ) : null}
+
+        {activeModuleId === "teamHoles" ? (
+          <ModulePanel title="Team pigeon holes" summary={moduleSummaries.teamHoles} onMinimize={minimizeActiveModule}>
+            <TeamPigeonHoles />
+          </ModulePanel>
+        ) : null}
+
+        {activeModuleId === "inbox" ? (
+      <PigeonWorkspace
+        hint={
+          triageEnabled
+            ? "One active cell at a time"
+            : viewingFolderId
+              ? `Folder · ${viewingFolder?.name ?? ""}`
+              : "Expand a row to see cells"
+        }
+        inboxGrid={
+          loading ? (
+            <div className="pigeon-grid pigeon-grid-inbox">
+              <p className="pigeon-cell pigeon-cell-span text-sm text-ableton-muted">Loading grid...</p>
+            </div>
+          ) : messages.length === 0 ? (
+            <div className="pigeon-grid pigeon-grid-inbox">
+              <div className="pigeon-cell pigeon-cell-span text-center text-sm text-ableton-muted">No cells occupied</div>
+            </div>
+          ) : (
+            <WeekGroupedMessageList
+              groups={weekGroups}
+              selectedId={selectedId}
+              expandedWeekKey={expandedWeekKey}
+              unlockedMessageId={unlockedMessageId}
+              awaitingDispositionId={awaitingDispositionId}
+              triageEnabled={triageEnabled}
+              onWeekToggle={handleWeekToggle}
+              onSelect={handleSelectMessage}
+              onQuickAction={handleQuickAction}
+              footer={
+                nextPageToken ? (
                   <button
                     type="button"
                     onClick={() => void loadInbox({ pageToken: nextPageToken })}
                     disabled={loadingMore}
-                    className="ableton-btn mt-2 w-full py-2 disabled:opacity-60"
+                    className="pigeon-cell pigeon-cell-span text-center text-xs uppercase tracking-[0.08em] disabled:opacity-60"
                   >
-                    {loadingMore ? "Loading more..." : "Load more emails"}
+                    {loadingMore ? "Loading more..." : "Load more cells"}
                   </button>
-                ) : null}
-              </>
-            )}
-          </div>
-        </section>
-
-        <section className="ableton-panel">
-          <div className="ableton-panel-header">Detail View</div>
-          <div className="max-h-[640px] overflow-y-auto p-4">
-            {selected ? (
-              selected.isNsfw ? (
-                <NsfwBlockedPanel
-                  onTrash={() => applyAction("trash", selected.gmailId)}
-                  onSpam={() => applyAction("spam", selected.gmailId)}
-                />
-              ) : (
+                ) : null
+              }
+            />
+          )
+        }
+        workspace={
+          selected ? (
+            selected.isNsfw ? (
+              <NsfwBlockedPanel
+                onTrash={() => applyAction("trash", selected.gmailId)}
+                onSpam={() => applyAction("spam", selected.gmailId)}
+              />
+            ) : (
               <>
                 {selectedWeekGroup ? (
                   <div className="mb-4 border border-ableton-border bg-ableton-pane2 p-3">
-                    <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-ableton-orange">
-                      {selectedWeekGroup.label}
-                    </p>
+                    <p className="pigeon-slot-id">ROW {selectedWeekGroup.label}</p>
                     <p className="mt-1 text-xs text-ableton-muted">{selectedWeekGroup.rangeLabel}</p>
                     <div className="mt-3">
                       <WeekProgress
                         openedCount={selectedWeekGroup.openedCount}
                         totalCount={selectedWeekGroup.totalCount}
+                        triage={triageEnabled}
                       />
                     </div>
                   </div>
                 ) : null}
-                <h2 className="mb-2 text-xl font-semibold">{selected.subject ?? "(No subject)"}</h2>
+                {selected.isPhishingRisk ? <PhishingWarningBanner /> : null}
+                <p className="pigeon-slot-id">Workspace</p>
+                <h2 className="mb-2 mt-1 text-xl font-semibold">{selected.subject ?? "(No subject)"}</h2>
                 <p className="mb-1 text-sm text-ableton-muted">{selected.fromAddress ?? "Unknown sender"}</p>
                 <p className="mb-4 font-mono text-[11px] text-ableton-orange">
                   {selected.internalDate ? new Date(selected.internalDate).toLocaleString() : "No timestamp"}
@@ -623,7 +963,29 @@ export function InboxClient() {
                 <div className="mb-6 border border-ableton-border bg-ableton-pane p-4 text-sm leading-relaxed text-ableton-text">
                   {selected.snippet ?? "No preview available"}
                 </div>
-                {!viewingFolderId ? (
+                {showDispositionFlow && !dispositionModeForSelected ? (
+                  <DispositionChooser
+                    suggestedQueue={selected.obligationQueue ?? "action"}
+                    onChoose={handleChooseDisposition}
+                  />
+                ) : null}
+                {showDispositionFlow && dispositionModeForSelected === "action" ? (
+                  <FolderBins
+                    folders={folders}
+                    filing={filing}
+                    onFile={(folderId) => void fileToFolder(selected.gmailId, folderId)}
+                    onArchive={() => void finishDisposition(selected.gmailId, "archive")}
+                  />
+                ) : null}
+                {showDispositionFlow && dispositionModeForSelected === "respond" ? (
+                  <RespondPanel
+                    messageId={selected.gmailId}
+                    sending={sendingQuickReply}
+                    onQuickReply={(template) => void handleQuickReply(template)}
+                    onArchiveAfterReply={() => void finishDisposition(selected.gmailId, "archive")}
+                  />
+                ) : null}
+                {!triageEnabled && !viewingFolderId ? (
                   <FileToFolder
                     folders={folders}
                     selectedFolderId={fileTargetFolderId}
@@ -631,68 +993,86 @@ export function InboxClient() {
                     onFile={() => void fileToFolder(selected.gmailId, fileTargetFolderId)}
                     canFile={canFileSelected}
                     filing={filing}
-                    required={triageEnabled}
+                    required={false}
                   />
                 ) : null}
-              <div className="flex flex-wrap gap-2">
-                {activeMailbox !== "DRAFT" && activeMailbox !== "SENT" ? (
-                  <>
-                    <a className="ableton-btn" href={`/compose?mode=reply&id=${selected.gmailId}`}>
-                      Reply
+                <div className="flex flex-wrap gap-2">
+                  {!triageEnabled && activeMailbox !== "DRAFT" && activeMailbox !== "SENT" ? (
+                    <>
+                      <a className="ableton-btn" href={`/compose?mode=reply&id=${selected.gmailId}`}>
+                        Reply
+                      </a>
+                      <a className="ableton-btn" href={`/compose?mode=forward&id=${selected.gmailId}`}>
+                        Forward
+                      </a>
+                    </>
+                  ) : null}
+                  {activeMailbox === "DRAFT" ? (
+                    <a className="ableton-btn ableton-btn-primary" href={`/compose?id=${selected.gmailId}`}>
+                      Edit draft
                     </a>
-                    <a className="ableton-btn" href={`/compose?mode=forward&id=${selected.gmailId}`}>
-                      Forward
-                    </a>
-                  </>
-                ) : null}
-                {activeMailbox === "DRAFT" ? (
-                  <a className="ableton-btn ableton-btn-primary" href={`/compose?id=${selected.gmailId}`}>
-                    Edit draft
-                  </a>
-                ) : null}
-                {visibleMailboxActions.map((action) => (
-                  <button
-                    key={action}
-                    className={`ableton-btn ${action === "delete_forever" ? "border-red-800 text-red-300" : ""}`}
-                    onClick={() => applyAction(action, selected.gmailId)}
-                  >
-                    {ACTION_LABELS[action]}
-                  </button>
-                ))}
-                {triageEnabled && selected && !canFileSelected ? (
-                  <p className="w-full text-xs text-ableton-muted">
-                    Open this email first, then choose a folder and file it.
-                  </p>
-                ) : null}
-                {triageEnabled && selected?.isUnread && lockedMessageCount > 0 ? (
-                  <p className="w-full text-xs text-ableton-muted">
-                    {lockedMessageCount} newer unread email{lockedMessageCount === 1 ? "" : "s"} waiting —
-                    file read emails or finish the oldest unread first.
-                  </p>
-                ) : null}
+                  ) : null}
+                  {!triageEnabled ? (
+                    visibleMailboxActions.map((action) => (
+                      <button
+                        key={action}
+                        className={`ableton-btn ${action === "delete_forever" ? "border-red-800 text-red-300" : ""}`}
+                        onClick={() => applyAction(action, selected.gmailId)}
+                      >
+                        {ACTION_LABELS[action]}
+                      </button>
+                    ))
+                  ) : (
+                    <>
+                      <button
+                        type="button"
+                        className="ableton-btn border-red-800 text-red-300"
+                        onClick={() => applyAction("trash", selected.gmailId)}
+                      >
+                        Trash
+                      </button>
+                      <button
+                        type="button"
+                        className="ableton-btn border-red-800 text-red-300"
+                        onClick={() => applyAction("spam", selected.gmailId)}
+                      >
+                        Spam
+                      </button>
+                    </>
+                  )}
+                  {triageEnabled && showDispositionFlow && !dispositionModeForSelected ? (
+                    <p className="w-full text-xs text-ableton-muted">Choose Respond, Action, or FYI to continue.</p>
+                  ) : null}
+                  {triageEnabled && lockedMessageCount > 0 ? (
+                    <p className="w-full text-xs text-ableton-muted">
+                      {lockedMessageCount} cell{lockedMessageCount === 1 ? "" : "s"} locked in the grid.
+                    </p>
+                  ) : null}
+                </div>
+                <WeekInboxDigest
+                  groups={weekGroups}
+                  selectedWeekKey={selectedWeekGroup?.key ?? null}
+                  onJumpToWeek={jumpToWeek}
+                />
+              </>
+            )
+          ) : (
+            <>
+              <div className="flex min-h-[12rem] flex-col items-center justify-center border border-dashed border-ableton-border bg-ableton-surface/50 p-6 text-center">
+                <p className="pigeon-slot-id">WS · empty</p>
+                <p className="mt-2 text-sm text-ableton-muted">Select a grid cell to open it here</p>
               </div>
-              <WeekInboxDigest
-                groups={weekGroups}
-                selectedWeekKey={selectedWeekGroup?.key ?? null}
-                onJumpToWeek={jumpToWeek}
-              />
-              </>
-              )
-            ) : (
-              <>
-                <p className="text-sm text-ableton-muted">Select a message clip to view details.</p>
-                {weekGroups.length > 0 ? (
-                  <WeekInboxDigest
-                    groups={weekGroups}
-                    selectedWeekKey={null}
-                    onJumpToWeek={jumpToWeek}
-                  />
-                ) : null}
-              </>
-            )}
-          </div>
-        </section>
-      </div>
-    </main>
+              {weekGroups.length > 0 ? (
+                <div className="mt-4">
+                  <WeekInboxDigest groups={weekGroups} selectedWeekKey={null} onJumpToWeek={jumpToWeek} />
+                </div>
+              ) : null}
+            </>
+          )
+        }
+      />
+        ) : null}
+      </main>
+    </>
   );
 }

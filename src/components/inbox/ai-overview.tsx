@@ -1,8 +1,15 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { BroadcastComposer } from "@/components/inbox/broadcast-composer";
 import { NoticeBoard } from "@/components/inbox/notice-board";
+import { OverviewFilterPicker } from "@/components/inbox/overview-filter-picker";
 import { OVERVIEW_FILTERS, type OverviewFilterId } from "@/lib/overview-filters";
+import {
+  loadEnabledOverviewFilters,
+  saveEnabledOverviewFilters,
+  toggleOverviewFilter
+} from "@/lib/overview-layout-prefs";
 import type { NoticeType } from "@/server/overview/types";
 
 type OverviewItem = {
@@ -13,12 +20,19 @@ type OverviewItem = {
   receivedAt: string;
   messageId: string;
   noticeType?: NoticeType;
+  isBroadcast?: boolean;
+  emailed?: boolean;
 };
 
 type OverviewResponse = {
   items: OverviewItem[];
   generatedBy: "ai" | "rules";
   filter: OverviewFilterId;
+};
+
+type OrgBroadcastResponse = {
+  org: { name: string; role: "manager" | "member" } | null;
+  broadcasts: OverviewItem[];
 };
 
 const ROTATE_MS = 6000;
@@ -30,24 +44,61 @@ type AiOverviewProps = {
 };
 
 export function AiOverview({ selectedFilter, onFilterChange, onSelectMessage }: AiOverviewProps) {
+  const [enabledFilterIds, setEnabledFilterIds] = useState<OverviewFilterId[]>(OVERVIEW_FILTERS.map((f) => f.id));
   const [items, setItems] = useState<OverviewItem[]>([]);
+  const [teamBroadcasts, setTeamBroadcasts] = useState<OverviewItem[]>([]);
+  const [orgRole, setOrgRole] = useState<"manager" | "member" | null>(null);
+  const [orgName, setOrgName] = useState("Team");
   const [activeIndex, setActiveIndex] = useState(0);
   const [loading, setLoading] = useState(true);
   const [generatedBy, setGeneratedBy] = useState<"ai" | "rules">("rules");
   const [error, setError] = useState<string | null>(null);
 
-  const activeFilter = OVERVIEW_FILTERS.find((filter) => filter.id === selectedFilter) ?? OVERVIEW_FILTERS[0];
+  const visibleFilters = OVERVIEW_FILTERS.filter((filter) => enabledFilterIds.includes(filter.id));
+  const activeFilter = getOverviewFilterSafe(selectedFilter, enabledFilterIds);
+
+  useEffect(() => {
+    setEnabledFilterIds(loadEnabledOverviewFilters());
+  }, []);
+
+  const loadTeamBroadcasts = useCallback(async () => {
+    try {
+      const response = await fetch("/api/org/broadcasts");
+      if (!response.ok) {
+        return;
+      }
+      const data = (await response.json()) as OrgBroadcastResponse;
+      setOrgRole(data.org?.role ?? null);
+      setOrgName(data.org?.name ?? "Team");
+      setTeamBroadcasts(
+        (data.broadcasts ?? []).map((broadcast) => ({
+          ...broadcast,
+          id: `broadcast-${broadcast.id}`,
+          isBroadcast: true
+        }))
+      );
+    } catch {
+      setTeamBroadcasts([]);
+    }
+  }, []);
 
   useEffect(() => {
     async function loadOverview() {
       setLoading(true);
       setError(null);
       try {
-        const response = await fetch(`/api/overview?filter=${selectedFilter}`);
-        if (!response.ok) {
+        const requests: [Promise<Response>, Promise<void>?] = [fetch(`/api/overview?filter=${selectedFilter}`)];
+        if (selectedFilter === "noticeboard") {
+          requests.push(loadTeamBroadcasts());
+        } else {
+          setTeamBroadcasts([]);
+        }
+
+        const [overviewRes] = await Promise.all(requests);
+        if (!overviewRes.ok) {
           throw new Error("Could not load overview");
         }
-        const data = (await response.json()) as OverviewResponse;
+        const data = (await overviewRes.json()) as OverviewResponse;
         setItems(data.items ?? []);
         setGeneratedBy(data.generatedBy ?? "rules");
         setActiveIndex(0);
@@ -60,7 +111,7 @@ export function AiOverview({ selectedFilter, onFilterChange, onSelectMessage }: 
     }
 
     void loadOverview();
-  }, [selectedFilter]);
+  }, [selectedFilter, loadTeamBroadcasts]);
 
   useEffect(() => {
     if (items.length <= 1) return;
@@ -70,12 +121,27 @@ export function AiOverview({ selectedFilter, onFilterChange, onSelectMessage }: 
     return () => window.clearInterval(timer);
   }, [items.length]);
 
+  function handleToggleFilter(filterId: OverviewFilterId) {
+    const next = toggleOverviewFilter(enabledFilterIds, filterId);
+    setEnabledFilterIds(next);
+    saveEnabledOverviewFilters(next);
+    if (!next.includes(selectedFilter)) {
+      onFilterChange(next[0]);
+    }
+  }
+
+  const showNoticeBoard = selectedFilter === "noticeboard";
+  const hasNoticeContent = teamBroadcasts.length > 0 || items.length > 0;
+
   return (
-    <section className="mb-4">
-      <div className="ableton-panel mb-3">
-        <div className="ableton-panel-header">Summary Filters</div>
-        <div className="flex flex-wrap gap-2 p-3">
-          {OVERVIEW_FILTERS.map((filter) => {
+    <div>
+      <div className="border-b border-ableton-border">
+        <div className="flex items-center justify-between gap-2 px-3 py-2">
+          <p className="text-[10px] uppercase tracking-[0.14em] text-ableton-muted">Summary filters</p>
+          <OverviewFilterPicker enabledFilterIds={enabledFilterIds} onToggle={handleToggleFilter} />
+        </div>
+        <div className="flex flex-wrap gap-2 px-3 pb-3">
+          {visibleFilters.map((filter) => {
             const isActive = filter.id === selectedFilter;
             return (
               <button
@@ -92,29 +158,43 @@ export function AiOverview({ selectedFilter, onFilterChange, onSelectMessage }: 
         <div className="border-t border-ableton-border px-3 py-2 text-xs text-ableton-muted">{activeFilter.description}</div>
       </div>
 
+      {showNoticeBoard && orgRole === "manager" ? (
+        <div className="border-b border-ableton-border p-3">
+          <BroadcastComposer orgName={orgName} onPublished={() => void loadTeamBroadcasts()} />
+        </div>
+      ) : null}
+
       {loading ? (
-        <div className="ableton-panel p-5">
+        <div className="p-5">
           <p className="text-sm text-ableton-muted">Building {activeFilter.label.toLowerCase()} summaries...</p>
           <div className="ableton-meter mt-3">
             <div className="ableton-meter-fill w-1/3 animate-pulse" />
           </div>
         </div>
+      ) : error && !hasNoticeContent ? (
+        <div className="p-5">
+          <p className="text-sm text-ableton-muted">{error}</p>
+        </div>
+      ) : showNoticeBoard ? (
+        <NoticeBoard
+          items={items}
+          teamBroadcasts={teamBroadcasts}
+          generatedBy={generatedBy}
+          onSelectMessage={onSelectMessage}
+        />
       ) : error || items.length === 0 ? (
-        <div className="ableton-panel p-5">
+        <div className="p-5">
           <p className="text-sm text-ableton-muted">
-            {error ??
-              (selectedFilter === "noticeboard"
-                ? "No business service updates found in recent emails."
-                : `No ${activeFilter.label.toLowerCase()} summaries found in recent emails.`)}
+            {error ?? `No ${activeFilter.label.toLowerCase()} summaries found in recent emails.`}
           </p>
         </div>
-      ) : selectedFilter === "noticeboard" ? (
-        <NoticeBoard items={items} generatedBy={generatedBy} onSelectMessage={onSelectMessage} />
       ) : (
-        <div className="ableton-panel overflow-hidden">
-          <div className="ableton-panel-header flex items-center justify-between">
-            <span>AI Overview · {activeFilter.label}</span>
-            <span className="normal-case tracking-normal text-ableton-orange">
+        <div className="overflow-hidden">
+          <div className="flex items-center justify-between border-b border-ableton-border bg-ableton-pane2 px-3 py-2">
+            <span className="text-[10px] uppercase tracking-[0.14em] text-ableton-muted">
+              AI Overview · {activeFilter.label}
+            </span>
+            <span className="font-mono text-[10px] text-ableton-orange">
               {generatedBy === "ai" ? "AI" : "Smart"}
             </span>
           </div>
@@ -170,6 +250,15 @@ export function AiOverview({ selectedFilter, onFilterChange, onSelectMessage }: 
           </div>
         </div>
       )}
-    </section>
+    </div>
   );
+}
+
+function getOverviewFilterSafe(selected: OverviewFilterId, enabled: OverviewFilterId[]) {
+  const match = OVERVIEW_FILTERS.find((filter) => filter.id === selected && enabled.includes(filter.id));
+  if (match) {
+    return match;
+  }
+  const fallback = OVERVIEW_FILTERS.find((filter) => enabled.includes(filter.id));
+  return fallback ?? OVERVIEW_FILTERS[0];
 }

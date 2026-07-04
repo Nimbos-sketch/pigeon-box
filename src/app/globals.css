@@ -170,6 +170,103 @@
     height: 100%;
     background: var(--ableton-orange);
   }
+
+  /* Pigeon box — compartment grid */
+  .pigeon-board {
+    border: 1px solid var(--ableton-border);
+    background: var(--ableton-border);
+  }
+
+  .pigeon-grid {
+    display: grid;
+    gap: 1px;
+    background: var(--ableton-border);
+  }
+
+  .pigeon-grid-inbox {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  @media (min-width: 640px) {
+    .pigeon-grid-inbox {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+  }
+
+  @media (min-width: 1024px) {
+    .pigeon-grid-inbox {
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+  }
+
+  .pigeon-grid-folders {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  @media (min-width: 640px) {
+    .pigeon-grid-folders {
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+  }
+
+  .pigeon-cell {
+    min-height: 5.5rem;
+    background: var(--ableton-pane);
+    padding: 0.5rem;
+    text-align: left;
+    transition: background 0.12s ease, outline-color 0.12s ease;
+  }
+
+  .pigeon-cell:hover:not(:disabled):not(.pigeon-cell-empty) {
+    background: var(--ableton-pane2);
+  }
+
+  .pigeon-cell-empty {
+    background: var(--ableton-surface);
+    opacity: 0.55;
+    pointer-events: none;
+  }
+
+  .pigeon-cell-selected {
+    background: var(--ableton-pane2);
+    outline: 2px solid var(--ableton-orange);
+    outline-offset: -2px;
+    z-index: 1;
+  }
+
+  .pigeon-cell-locked {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+
+  .pigeon-cell-next {
+    outline: 1px solid color-mix(in srgb, var(--ableton-orange) 70%, transparent);
+    outline-offset: -1px;
+  }
+
+  .pigeon-cell-week {
+    grid-column: 1 / -1;
+    min-height: auto;
+    background: var(--ableton-pane2);
+    padding: 0.5rem 0.65rem;
+  }
+
+  .pigeon-cell-span {
+    grid-column: 1 / -1;
+  }
+
+  .pigeon-workspace-pane {
+    min-height: 20rem;
+    background: var(--ableton-pane);
+    border-left: 1px solid var(--ableton-border);
+  }
+
+  .pigeon-slot-id {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 9px;
+    letter-spacing: 0.08em;
+    color: var(--ableton-muted);
+  }
 }
 
 @keyframes fadeIn {

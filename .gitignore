@@ -2,7 +2,11 @@
 node_modules
 .env
 .env.local
+.env.*.local
 coverage
 playwright-report
 test-results
 *.log
+prisma/*.db
+prisma/*.db-journal
+tsconfig.tsbuildinfo

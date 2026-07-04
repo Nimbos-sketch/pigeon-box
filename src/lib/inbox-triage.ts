@@ -7,6 +7,15 @@ export type TriageMessage = {
   isNsfw?: boolean;
 };
 
+export type TriageQueueOptions = {
+  /** Message opened but not yet actioned — holds the queue until disposition completes. */
+  awaitingDispositionId?: string | null;
+  /** Message with respond/action/fyi flow in progress. */
+  activeDispositionId?: string | null;
+  /** Messages already dispositioned this session — skipped when finding the next unlock. */
+  dispositionedIds?: ReadonlySet<string>;
+};
+
 function triageEligible<T extends TriageMessage>(messages: T[]): T[] {
   return messages.filter((message) => !message.isNsfw);
 }
@@ -30,21 +39,54 @@ export function sortMessagesOldestFirst<T extends TriageMessage>(messages: T[]):
   });
 }
 
-/** Oldest unread email, or if all are read the oldest still waiting to be filed. */
-export function getUnlockedMessageId(messages: TriageMessage[]): string | null {
-  const sorted = sortMessagesOldestFirst(triageEligible(messages));
+function pendingMessages(
+  messages: TriageMessage[],
+  dispositionedIds?: ReadonlySet<string>
+): TriageMessage[] {
+  const eligible = triageEligible(messages);
+  if (!dispositionedIds || dispositionedIds.size === 0) {
+    return sortMessagesOldestFirst(eligible);
+  }
+  return sortMessagesOldestFirst(
+    eligible.filter((message) => !dispositionedIds.has(message.gmailId))
+  );
+}
+
+/** Oldest undispositioned email, or the one currently opened / in a disposition flow. */
+export function getUnlockedMessageId(
+  messages: TriageMessage[],
+  options: TriageQueueOptions = {}
+): string | null {
+  const {
+    awaitingDispositionId = null,
+    activeDispositionId = null,
+    dispositionedIds
+  } = options;
+
+  if (activeDispositionId) {
+    return activeDispositionId;
+  }
+
+  const sorted = pendingMessages(messages, dispositionedIds);
   if (sorted.length === 0) {
     return null;
   }
-  const oldestUnread = sorted.find((message) => message.isUnread);
-  return oldestUnread?.gmailId ?? sorted[0].gmailId;
+
+  if (
+    awaitingDispositionId &&
+    sorted.some((message) => message.gmailId === awaitingDispositionId)
+  ) {
+    return awaitingDispositionId;
+  }
+
+  return sorted[0]?.gmailId ?? null;
 }
 
-/**
- * Unread mail: only the oldest unread can be opened.
- * Already-read mail stays openable so you can file it without getting stuck.
- */
-export function isMessageLocked(messageId: string, messages: TriageMessage[]): boolean {
+export function isMessageLocked(
+  messageId: string,
+  messages: TriageMessage[],
+  options: TriageQueueOptions = {}
+): boolean {
   const message = messages.find((item) => item.gmailId === messageId);
   if (!message) {
     return false;
@@ -52,14 +94,12 @@ export function isMessageLocked(messageId: string, messages: TriageMessage[]): b
   if (message.isNsfw) {
     return true;
   }
-  if (!message.isUnread) {
+
+  const unlocked = getUnlockedMessageId(messages, options);
+  if (!unlocked) {
     return false;
   }
-  const oldestUnread = sortMessagesOldestFirst(triageEligible(messages)).find((item) => item.isUnread);
-  if (!oldestUnread) {
-    return false;
-  }
-  return messageId !== oldestUnread.gmailId;
+  return messageId !== unlocked;
 }
 
 export function hasMessageBeenOpened(message: TriageMessage, openedIds: ReadonlySet<string>): boolean {
@@ -75,17 +115,20 @@ export function canFileMessage(
   if (!message) {
     return false;
   }
-  return hasMessageBeenOpened(message, openedIds);
+  return openedIds.has(message.gmailId);
 }
 
 export const canArchiveMessage = canFileMessage;
 
-export function countLockedMessages(messages: TriageMessage[]): number {
-  const oldestUnread = sortMessagesOldestFirst(triageEligible(messages)).find((message) => message.isUnread);
-  if (!oldestUnread) {
+export function countLockedMessages(
+  messages: TriageMessage[],
+  options: TriageQueueOptions = {}
+): number {
+  const unlocked = getUnlockedMessageId(messages, options);
+  if (!unlocked) {
     return 0;
   }
-  return messages.filter((message) => message.isUnread && message.gmailId !== oldestUnread.gmailId).length;
+  return triageEligible(messages).filter((message) => message.gmailId !== unlocked).length;
 }
 
 export function countReadAwaitingFile(messages: TriageMessage[]): number {

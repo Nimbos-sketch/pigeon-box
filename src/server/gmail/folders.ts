@@ -1,4 +1,5 @@
 import { db } from "@/lib/db";
+import { normalizeFolderColor, pickFolderColor } from "@/lib/folder-colors";
 import { createGmailClient } from "@/server/gmail/client";
 import { modifyMessage } from "@/server/gmail/service";
 
@@ -6,6 +7,7 @@ export type EmailFolderRecord = {
   id: string;
   name: string;
   gmailLabelId: string;
+  color: string;
   createdAt: string;
 };
 
@@ -18,11 +20,30 @@ export async function listUserFolders(userId: string): Promise<EmailFolderRecord
     id: folder.id,
     name: folder.name,
     gmailLabelId: folder.gmailLabelId,
+    color: normalizeFolderColor(folder.color),
     createdAt: folder.createdAt.toISOString()
   }));
 }
 
-export async function createUserFolder(userId: string, name: string): Promise<EmailFolderRecord> {
+export async function updateUserFolderColor(userId: string, folderId: string, color: string) {
+  const folder = await db.emailFolder.findFirst({ where: { id: folderId, userId } });
+  if (!folder) {
+    throw new Error("Folder not found");
+  }
+  const updated = await db.emailFolder.update({
+    where: { id: folderId },
+    data: { color: normalizeFolderColor(color) }
+  });
+  return {
+    id: updated.id,
+    name: updated.name,
+    gmailLabelId: updated.gmailLabelId,
+    color: normalizeFolderColor(updated.color),
+    createdAt: updated.createdAt.toISOString()
+  };
+}
+
+export async function createUserFolder(userId: string, name: string, color?: string): Promise<EmailFolderRecord> {
   const trimmed = name.trim();
   if (!trimmed) {
     throw new Error("Folder name is required");
@@ -39,9 +60,13 @@ export async function createUserFolder(userId: string, name: string): Promise<Em
       id: existing.id,
       name: existing.name,
       gmailLabelId: existing.gmailLabelId,
+      color: normalizeFolderColor(existing.color),
       createdAt: existing.createdAt.toISOString()
     };
   }
+
+  const folderCount = await db.emailFolder.count({ where: { userId } });
+  const folderColor = normalizeFolderColor(color, pickFolderColor(folderCount));
 
   const { gmail, accountId } = await createGmailClient(userId);
   const labelResponse = await gmail.users.labels.create({
@@ -65,7 +90,7 @@ export async function createUserFolder(userId: string, name: string): Promise<Em
   });
 
   const folder = await db.emailFolder.create({
-    data: { userId, name: trimmed, gmailLabelId }
+    data: { userId, name: trimmed, gmailLabelId, color: folderColor }
   });
 
   await db.auditLog.create({
@@ -81,6 +106,7 @@ export async function createUserFolder(userId: string, name: string): Promise<Em
     id: folder.id,
     name: folder.name,
     gmailLabelId: folder.gmailLabelId,
+    color: normalizeFolderColor(folder.color),
     createdAt: folder.createdAt.toISOString()
   };
 }

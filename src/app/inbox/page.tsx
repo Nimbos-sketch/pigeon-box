@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { InboxClient } from "@/components/inbox/inbox-client";
@@ -11,7 +12,9 @@ export default async function InboxPage() {
 
   return (
     <MailShell email={session.user.email}>
-      <InboxClient />
+      <Suspense fallback={<p className="p-6 text-sm text-ableton-muted">Loading inbox...</p>}>
+        <InboxClient />
+      </Suspense>
     </MailShell>
   );
 }

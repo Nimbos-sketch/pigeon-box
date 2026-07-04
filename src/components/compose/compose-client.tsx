@@ -18,6 +18,13 @@ export function ComposeClient() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    const prefillTo = searchParams.get("to");
+    if (prefillTo && !messageId) {
+      setTo(prefillTo);
+    }
+  }, [searchParams, messageId]);
+
+  useEffect(() => {
     if (!messageId || (mode !== "reply" && mode !== "forward")) return;
     async function loadPrefill() {
       const res = await fetch(`/api/messages/${messageId}/compose?mode=${mode}`);
@@ -57,6 +64,10 @@ export function ComposeClient() {
         });
       }
       if (!res.ok) throw new Error("Failed to send email");
+      if (mode === "reply" && messageId) {
+        router.push(`/inbox?responded=${messageId}`);
+        return;
+      }
       router.push("/inbox");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Send failed");

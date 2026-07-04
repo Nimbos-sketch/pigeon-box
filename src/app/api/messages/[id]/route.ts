@@ -1,5 +1,6 @@
 import { auth } from "@/lib/auth";
 import { isNsfwEmail } from "@/lib/nsfw-filter";
+import { isPhishingRisk } from "@/lib/phishing-guard";
 import { getMessageById } from "@/server/gmail/service";
 import { fail, handleApiError, ok } from "@/server/http";
 
@@ -33,7 +34,17 @@ export async function GET(_: Request, { params }: Params) {
         }
       });
     }
-    return ok({ message: { ...message, isNsfw: false } });
+    return ok({
+      message: {
+        ...message,
+        isNsfw: false,
+        isPhishingRisk: isPhishingRisk({
+          subject: message.subject,
+          fromAddress: message.fromAddress,
+          snippet: message.snippet
+        })
+      }
+    });
   } catch (error) {
     return handleApiError(error, "GET /api/messages/[id]");
   }

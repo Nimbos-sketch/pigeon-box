@@ -18,6 +18,12 @@ model User {
   gmailAccounts GmailAccount[]
   settings      UserSettings?
   emailFolders  EmailFolder[]
+  senderRules   SenderRule[]
+  orgMemberships OrganizationMember[]
+  orgBroadcasts  OrgBroadcast[]
+  pigeonHoles        PigeonHole[]
+  sentPigeonMessages PigeonHoleMessage[] @relation("SentPigeonMessages")
+  teamLinkRequests   OrgTeamLink[]       @relation("TeamLinkRequester")
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
 }
@@ -155,10 +161,134 @@ model EmailFolder {
   userId       String
   name         String
   gmailLabelId String
+  color        String   @default("#f59e0b")
   user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  senderRules  SenderRule[]
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
   @@unique([userId, name])
   @@index([userId])
+}
+
+model SenderRule {
+  id              String       @id @default(cuid())
+  userId          String
+  senderKey       String
+  preferredAction String
+  folderId        String?
+  actionCount     Int          @default(1)
+  autoApply       Boolean      @default(false)
+  lastActionAt    DateTime     @default(now())
+  user            User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  folder          EmailFolder? @relation(fields: [folderId], references: [id], onDelete: SetNull)
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  @@unique([userId, senderKey])
+  @@index([userId, autoApply])
+}
+
+model Organization {
+  id         String               @id @default(cuid())
+  name       String
+  slug       String               @unique
+  members    OrganizationMember[]
+  broadcasts OrgBroadcast[]
+  pigeonHoles PigeonHole[]
+  linksFrom  OrgTeamLink[]        @relation("LinkFrom")
+  linksTo    OrgTeamLink[]        @relation("LinkTo")
+  createdAt  DateTime             @default(now())
+  updatedAt  DateTime             @updatedAt
+}
+
+model OrganizationMember {
+  id        String       @id @default(cuid())
+  orgId     String
+  userId    String
+  role      String
+  org       Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  user      User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+
+  @@unique([orgId, userId])
+  @@index([userId])
+}
+
+model OrgBroadcast {
+  id          String       @id @default(cuid())
+  orgId       String
+  authorId    String
+  headline    String
+  body        String
+  noticeType  String       @default("general")
+  emailed     Boolean      @default(false)
+  publishedAt DateTime     @default(now())
+  org         Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  author      User         @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  @@index([orgId, publishedAt])
+}
+
+model PigeonHole {
+  id           String              @id @default(cuid())
+  orgId        String
+  userId       String?
+  ownerUserId  String?
+  contactEmail String?
+  kind         String              @default("member")
+  slotCode     String
+  label        String?
+  createdById  String?
+  org          Organization        @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  user         User?               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages     PigeonHoleMessage[]
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
+
+  @@unique([orgId, userId])
+  @@unique([orgId, ownerUserId, contactEmail])
+  @@unique([orgId, ownerUserId, slotCode])
+  @@index([orgId])
+  @@index([userId])
+  @@index([ownerUserId])
+  @@index([contactEmail])
+}
+
+model PigeonHoleMessage {
+  id              String     @id @default(cuid())
+  holeId          String
+  senderId        String
+  senderOrgId     String
+  subject         String
+  body            String
+  status          String     @default("unread")
+  obligationQueue String     @default("action")
+  hole            PigeonHole @relation(fields: [holeId], references: [id], onDelete: Cascade)
+  sender          User       @relation("SentPigeonMessages", fields: [senderId], references: [id], onDelete: Cascade)
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+
+  @@index([holeId, status, createdAt])
+  @@index([senderId, createdAt])
+}
+
+model OrgTeamLink {
+  id          String       @id @default(cuid())
+  fromOrgId   String
+  toOrgId     String
+  status      String       @default("pending")
+  requestedBy String
+  approvedBy  String?
+  fromOrg     Organization @relation("LinkFrom", fields: [fromOrgId], references: [id], onDelete: Cascade)
+  toOrg       Organization @relation("LinkTo", fields: [toOrgId], references: [id], onDelete: Cascade)
+  requester   User         @relation("TeamLinkRequester", fields: [requestedBy], references: [id], onDelete: Cascade)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  @@unique([fromOrgId, toOrgId])
+  @@index([toOrgId, status])
 }

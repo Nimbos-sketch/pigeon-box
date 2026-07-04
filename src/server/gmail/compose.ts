@@ -1,4 +1,5 @@
 import { db } from "@/lib/db";
+import { ensureContactHolesFromRecipients } from "@/server/pigeon-holes/service";
 import { createGmailClient } from "@/server/gmail/client";
 import { buildForwardBody, buildReplyBody, encodeRawEmail } from "@/server/gmail/mime";
 import { getUserSettings } from "@/server/settings/service";
@@ -98,6 +99,9 @@ export async function sendEmail(userId: string, input: SendEmailInput) {
       metaJson: JSON.stringify({ to: input.to, subject: input.subject })
     }
   });
+
+  const sender = await db.user.findUnique({ where: { id: userId }, select: { email: true } });
+  void ensureContactHolesFromRecipients(userId, sender?.email, input).catch(() => null);
 
   return response.data;
 }

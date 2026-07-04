@@ -3,7 +3,7 @@ import { env } from "@/lib/env";
 
 const ERROR_HINTS: Record<string, string> = {
   Configuration:
-    "Server auth config is wrong. Check GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, AUTH_URL, and NEXTAUTH_URL in .env.",
+    "OAuth session cookie was lost or invalid — common on iPhone Safari after a server restart or if you refreshed the Google callback page. Clear site data for this URL, open the tunnel home page fresh, and sign in again. Also verify GOOGLE_CLIENT_ID, AUTH_URL, and NEXTAUTH_URL match your current tunnel URL.",
   AccessDenied:
     "Google blocked the sign-in. If the app is in Testing mode, add your Gmail address under OAuth consent screen → Test users.",
   Verification:

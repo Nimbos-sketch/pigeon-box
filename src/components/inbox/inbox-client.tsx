@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { AiOverview } from "@/components/inbox/ai-overview";
 import { InboxModuleTabs } from "@/components/inbox/inbox-module-tabs";
+import { MessageBodyPanel } from "@/components/inbox/message-body-panel";
 import { ModulePanel } from "@/components/inbox/module-panel";
 import { DispositionChooser } from "@/components/inbox/disposition-chooser";
 import { FolderBins } from "@/components/inbox/folder-bins";
@@ -20,6 +21,7 @@ import { WeekInboxDigest } from "@/components/inbox/week-inbox-digest";
 import { WeekProgress } from "@/components/inbox/week-progress";
 import { SmartHandlingBanner } from "@/components/inbox/smart-handling-banner";
 import { TeamPigeonHoles } from "@/components/inbox/team-pigeon-holes";
+import { TriageSafetyActions } from "@/components/inbox/triage-safety-actions";
 import { formatSenderRuleNotice } from "@/lib/sender-rule-notice";
 import { DEFAULT_FOLDER_COLOR } from "@/lib/folder-colors";
 import type { AutoHandledSummary } from "@/server/sender-rules/service";
@@ -48,6 +50,7 @@ import {
   type MailboxViewId,
   type MessageAction
 } from "@/lib/mailbox-views";
+import { useIsMdUp } from "@/hooks/use-media-query";
 
 type Message = {
   gmailId: string;
@@ -66,11 +69,6 @@ type Message = {
     actionsUntilAuto: number;
     autoApply: boolean;
   } | null;
-};
-
-type Label = {
-  id: string;
-  name: string;
 };
 
 type LoadInboxOptions = {
@@ -106,8 +104,8 @@ function mergeMessages(current: Message[], incoming: Message[]): Message[] {
 export function InboxClient() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const isMdUp = useIsMdUp();
   const [messages, setMessages] = useState<Message[]>([]);
-  const [labels, setLabels] = useState<Label[]>([]);
   const [folders, setFolders] = useState<EmailFolder[]>([]);
   const [viewingFolderId, setViewingFolderId] = useState<string | null>(null);
   const [fileTargetFolderId, setFileTargetFolderId] = useState("");
@@ -206,6 +204,8 @@ export function InboxClient() {
     activeDisposition && activeDisposition.messageId === selected?.gmailId
       ? activeDisposition.mode
       : null;
+  const mobileDetailMode = !isMdUp && Boolean(selected);
+  const mobileResponseMode = mobileDetailMode && Boolean(showDispositionFlow);
 
   const selectedWeekGroup = useMemo(
     () => findWeekGroupForMessage(weekGroups, selectedId),
@@ -316,6 +316,11 @@ export function InboxClient() {
     setExpandedWeekKey((current) => (current === weekKey ? null : weekKey));
   }
 
+  function handleBackToGrid() {
+    setSelectedId(null);
+    setAwaitingDispositionId(null);
+  }
+
   function handleSelectMessage(messageId: string) {
     const message = messages.find((item) => item.gmailId === messageId);
     if (message?.isNsfw) {
@@ -397,6 +402,7 @@ export function InboxClient() {
     }
     setError(null);
     try {
+      const foldersPromise = !isLoadMore ? fetch("/api/folders") : null;
       const messagesRes = await fetch(buildInboxUrl(options));
       if (!messagesRes.ok) {
         const body = (await messagesRes.json().catch(() => null)) as { error?: string } | null;
@@ -428,26 +434,19 @@ export function InboxClient() {
         setTriageNotice(null);
         setActiveDisposition(null);
 
-        const [labelsRes, foldersRes] = await Promise.all([
-          fetch("/api/labels"),
-          fetch("/api/folders")
-        ]);
-
-        if (labelsRes.ok) {
-          const labelsJson = await labelsRes.json();
-          setLabels(labelsJson.labels ?? []);
-        }
-
-        if (foldersRes.ok) {
-          const foldersJson = await foldersRes.json();
-          setFolders(
-            (foldersJson.folders ?? []).map((folder: EmailFolder) => ({
-              ...folder,
-              color: folder.color ?? DEFAULT_FOLDER_COLOR
-            }))
-          );
-        } else {
-          setFolders([]);
+        if (foldersPromise) {
+          const foldersRes = await foldersPromise;
+          if (foldersRes.ok) {
+            const foldersJson = await foldersRes.json();
+            setFolders(
+              (foldersJson.folders ?? []).map((folder: EmailFolder) => ({
+                ...folder,
+                color: folder.color ?? DEFAULT_FOLDER_COLOR
+              }))
+            );
+          } else {
+            setFolders([]);
+          }
         }
       }
 
@@ -455,7 +454,7 @@ export function InboxClient() {
         setSelectedId(null);
         setAwaitingDispositionId(null);
       } else if (!isLoadMore) {
-        setSelectedId(nextMessages[0]?.gmailId ?? null);
+        setSelectedId(nextMessages.find((message) => !message.isNsfw)?.gmailId ?? null);
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Unknown inbox error");
@@ -533,8 +532,16 @@ export function InboxClient() {
   }
 
   async function applyAction(action: MessageAction, messageId: string) {
+    const previous = messages;
+    const previousSelectedId = selectedId;
+    const targetMessage = previous.find((msg) => msg.gmailId === messageId);
+    const isBlockedContent = targetMessage?.isNsfw === true;
+    const willRemoveFromView = actionRemovesFromView(action, activeMailbox);
+
     const requiresReadFirst =
-      triageEnabled && (action === "archive" || action === "trash" || action === "spam");
+      triageEnabled &&
+      !isBlockedContent &&
+      (action === "archive" || action === "trash" || action === "spam");
     if (requiresReadFirst && !openedMessageIds.has(messageId)) {
       setTriageNotice("Open this email first, then choose an action.");
       return;
@@ -543,17 +550,25 @@ export function InboxClient() {
     if (
       triageEnabled &&
       (action === "archive" || action === "trash" || action === "spam") &&
-      messageId === awaitingDispositionId
+      (messageId === awaitingDispositionId || isBlockedContent)
     ) {
       markDispositioned(messageId);
       setAwaitingDispositionId(null);
       clearDisposition();
     }
 
-    const previous = messages;
-    const previousSelectedId = selectedId;
-
-    if (action !== "delete_forever") {
+    if (isBlockedContent && willRemoveFromView) {
+      setTriageNotice(null);
+      setMessages((current) => current.filter((msg) => msg.gmailId !== messageId));
+      if (selectedId === messageId) {
+        setSelectedId(null);
+      }
+      setOpenedMessageIds((opened) => {
+        const updated = new Set(opened);
+        updated.delete(messageId);
+        return updated;
+      });
+    } else if (action !== "delete_forever") {
       setMessages((current) =>
         current.map((msg) =>
           msg.gmailId !== messageId
@@ -582,7 +597,7 @@ export function InboxClient() {
         setTriageNotice(learned);
       }
 
-      if (actionRemovesFromView(action, activeMailbox)) {
+      if (willRemoveFromView && !isBlockedContent) {
         setMessages((current) => {
           const next = current.filter((msg) => msg.gmailId !== messageId);
           if (isTriageMailbox(activeMailbox)) {
@@ -766,8 +781,27 @@ export function InboxClient() {
     }
   }, [selected]);
 
+  useEffect(() => {
+    if (!mobileDetailMode) {
+      return;
+    }
+    document.documentElement.classList.add("overflow-hidden");
+    document.body.classList.add("overflow-hidden");
+    if (mobileResponseMode) {
+      document.body.dataset.inboxResponse = "true";
+    } else {
+      delete document.body.dataset.inboxResponse;
+    }
+    return () => {
+      document.documentElement.classList.remove("overflow-hidden");
+      document.body.classList.remove("overflow-hidden");
+      delete document.body.dataset.inboxResponse;
+    };
+  }, [mobileDetailMode, mobileResponseMode]);
+
   return (
-    <>
+    <div className={`flex min-h-0 flex-1 flex-col ${mobileDetailMode ? "overflow-hidden" : ""}`}>
+      {!mobileDetailMode ? (
       <InboxModuleTabs
         activeId={activeModuleId}
         visibleIds={visibleModuleIds}
@@ -776,13 +810,14 @@ export function InboxClient() {
         onCycle={cycleModule}
         onFocusInbox={() => selectModule("inbox")}
       />
+      ) : null}
 
-      <main className="mx-auto max-w-7xl p-4">
-        {error ? (
+      <main className={`mx-auto flex w-full max-w-7xl min-h-0 flex-1 flex-col ${!isMdUp && selected && activeModuleId === "inbox" ? "p-0" : "p-4"}`}>
+        {error && !mobileResponseMode ? (
           <p className="mb-4 border border-red-800 bg-red-950/40 p-3 text-sm text-red-300">{error}</p>
         ) : null}
 
-        {triageNotice ? (
+        {triageNotice && !mobileResponseMode ? (
           <p className="mb-4 border border-ableton-orange/60 bg-ableton-pane2 p-3 text-sm text-ableton-text">
             {triageNotice}
           </p>
@@ -888,7 +923,12 @@ export function InboxClient() {
         ) : null}
 
         {activeModuleId === "inbox" ? (
+      <div className={!isMdUp && selected ? "flex min-h-0 flex-1 flex-col" : undefined}>
       <PigeonWorkspace
+        showWorkspaceOnMobile={Boolean(selected)}
+        compactChrome={mobileResponseMode}
+        onBackToGrid={handleBackToGrid}
+        workspaceTitle={mobileResponseMode ? "Respond or action" : (selected?.subject ?? undefined)}
         hint={
           triageEnabled
             ? "One active cell at a time"
@@ -939,122 +979,159 @@ export function InboxClient() {
                 onSpam={() => applyAction("spam", selected.gmailId)}
               />
             ) : (
-              <>
-                {selectedWeekGroup ? (
-                  <div className="mb-4 border border-ableton-border bg-ableton-pane2 p-3">
-                    <p className="pigeon-slot-id">ROW {selectedWeekGroup.label}</p>
-                    <p className="mt-1 text-xs text-ableton-muted">{selectedWeekGroup.rangeLabel}</p>
-                    <div className="mt-3">
-                      <WeekProgress
-                        openedCount={selectedWeekGroup.openedCount}
-                        totalCount={selectedWeekGroup.totalCount}
-                        triage={triageEnabled}
+              <div className={mobileDetailMode ? "flex h-full min-h-0 flex-col overflow-hidden" : undefined}>
+                {mobileResponseMode ? (
+                  <div className="flex min-h-0 flex-1 flex-col justify-center gap-2 overflow-hidden px-3 py-2">
+                    {showDispositionFlow && !dispositionModeForSelected ? (
+                      <DispositionChooser
+                        compact
+                        suggestedQueue={selected.obligationQueue ?? "action"}
+                        onChoose={handleChooseDisposition}
                       />
-                    </div>
+                    ) : null}
+                    {showDispositionFlow && dispositionModeForSelected === "action" ? (
+                      <FolderBins
+                        compact
+                        folders={folders}
+                        filing={filing}
+                        onFile={(folderId) => void fileToFolder(selected.gmailId, folderId)}
+                        onArchive={() => void finishDisposition(selected.gmailId, "archive")}
+                      />
+                    ) : null}
+                    {showDispositionFlow && dispositionModeForSelected === "respond" ? (
+                      <RespondPanel
+                        compact
+                        messageId={selected.gmailId}
+                        sending={sendingQuickReply}
+                        onQuickReply={(template) => void handleQuickReply(template)}
+                        onArchiveAfterReply={() => void finishDisposition(selected.gmailId, "archive")}
+                      />
+                    ) : null}
+                    {triageEnabled ? (
+                      <TriageSafetyActions
+                        compact
+                        onTrash={() => applyAction("trash", selected.gmailId)}
+                        onSpam={() => applyAction("spam", selected.gmailId)}
+                      />
+                    ) : null}
                   </div>
-                ) : null}
-                {selected.isPhishingRisk ? <PhishingWarningBanner /> : null}
-                <p className="pigeon-slot-id">Workspace</p>
-                <h2 className="mb-2 mt-1 text-xl font-semibold">{selected.subject ?? "(No subject)"}</h2>
-                <p className="mb-1 text-sm text-ableton-muted">{selected.fromAddress ?? "Unknown sender"}</p>
-                <p className="mb-4 font-mono text-[11px] text-ableton-orange">
-                  {selected.internalDate ? new Date(selected.internalDate).toLocaleString() : "No timestamp"}
-                </p>
-                <div className="mb-6 border border-ableton-border bg-ableton-pane p-4 text-sm leading-relaxed text-ableton-text">
-                  {selected.snippet ?? "No preview available"}
-                </div>
-                {showDispositionFlow && !dispositionModeForSelected ? (
-                  <DispositionChooser
-                    suggestedQueue={selected.obligationQueue ?? "action"}
-                    onChoose={handleChooseDisposition}
-                  />
-                ) : null}
-                {showDispositionFlow && dispositionModeForSelected === "action" ? (
-                  <FolderBins
-                    folders={folders}
-                    filing={filing}
-                    onFile={(folderId) => void fileToFolder(selected.gmailId, folderId)}
-                    onArchive={() => void finishDisposition(selected.gmailId, "archive")}
-                  />
-                ) : null}
-                {showDispositionFlow && dispositionModeForSelected === "respond" ? (
-                  <RespondPanel
-                    messageId={selected.gmailId}
-                    sending={sendingQuickReply}
-                    onQuickReply={(template) => void handleQuickReply(template)}
-                    onArchiveAfterReply={() => void finishDisposition(selected.gmailId, "archive")}
-                  />
-                ) : null}
-                {!triageEnabled && !viewingFolderId ? (
-                  <FileToFolder
-                    folders={folders}
-                    selectedFolderId={fileTargetFolderId}
-                    onFolderSelect={setFileTargetFolderId}
-                    onFile={() => void fileToFolder(selected.gmailId, fileTargetFolderId)}
-                    canFile={canFileSelected}
-                    filing={filing}
-                    required={false}
-                  />
-                ) : null}
-                <div className="flex flex-wrap gap-2">
-                  {!triageEnabled && activeMailbox !== "DRAFT" && activeMailbox !== "SENT" ? (
-                    <>
-                      <a className="ableton-btn" href={`/compose?mode=reply&id=${selected.gmailId}`}>
-                        Reply
-                      </a>
-                      <a className="ableton-btn" href={`/compose?mode=forward&id=${selected.gmailId}`}>
-                        Forward
-                      </a>
-                    </>
-                  ) : null}
-                  {activeMailbox === "DRAFT" ? (
-                    <a className="ableton-btn ableton-btn-primary" href={`/compose?id=${selected.gmailId}`}>
-                      Edit draft
-                    </a>
-                  ) : null}
-                  {!triageEnabled ? (
-                    visibleMailboxActions.map((action) => (
-                      <button
-                        key={action}
-                        className={`ableton-btn ${action === "delete_forever" ? "border-red-800 text-red-300" : ""}`}
-                        onClick={() => applyAction(action, selected.gmailId)}
-                      >
-                        {ACTION_LABELS[action]}
-                      </button>
-                    ))
-                  ) : (
-                    <>
-                      <button
-                        type="button"
-                        className="ableton-btn border-red-800 text-red-300"
-                        onClick={() => applyAction("trash", selected.gmailId)}
-                      >
-                        Trash
-                      </button>
-                      <button
-                        type="button"
-                        className="ableton-btn border-red-800 text-red-300"
-                        onClick={() => applyAction("spam", selected.gmailId)}
-                      >
-                        Spam
-                      </button>
-                    </>
-                  )}
-                  {triageEnabled && showDispositionFlow && !dispositionModeForSelected ? (
-                    <p className="w-full text-xs text-ableton-muted">Choose Respond, Action, or FYI to continue.</p>
-                  ) : null}
-                  {triageEnabled && lockedMessageCount > 0 ? (
-                    <p className="w-full text-xs text-ableton-muted">
-                      {lockedMessageCount} cell{lockedMessageCount === 1 ? "" : "s"} locked in the grid.
-                    </p>
-                  ) : null}
-                </div>
-                <WeekInboxDigest
-                  groups={weekGroups}
-                  selectedWeekKey={selectedWeekGroup?.key ?? null}
-                  onJumpToWeek={jumpToWeek}
-                />
-              </>
+                ) : (
+                  <>
+                    <div className={mobileDetailMode ? "min-h-0 flex-1 overflow-y-auto px-4 pt-4" : undefined}>
+                      {selectedWeekGroup && isMdUp ? (
+                        <div className="mb-4 border border-ableton-border bg-ableton-pane2 p-3">
+                          <p className="pigeon-slot-id">ROW {selectedWeekGroup.label}</p>
+                          <p className="mt-1 text-xs text-ableton-muted">{selectedWeekGroup.rangeLabel}</p>
+                          <div className="mt-3">
+                            <WeekProgress
+                              openedCount={selectedWeekGroup.openedCount}
+                              totalCount={selectedWeekGroup.totalCount}
+                              triage={triageEnabled}
+                            />
+                          </div>
+                        </div>
+                      ) : null}
+                      {selected.isPhishingRisk ? <PhishingWarningBanner /> : null}
+                      <p className="pigeon-slot-id">Workspace</p>
+                      <h2 className="mb-2 mt-1 text-xl font-semibold">{selected.subject ?? "(No subject)"}</h2>
+                      <p className="mb-1 text-sm text-ableton-muted">{selected.fromAddress ?? "Unknown sender"}</p>
+                      <p className="mb-4 font-mono text-[11px] text-ableton-orange">
+                        {selected.internalDate ? new Date(selected.internalDate).toLocaleString() : "No timestamp"}
+                      </p>
+                      <MessageBodyPanel messageId={selected.gmailId} fallbackSnippet={selected.snippet} fill={mobileDetailMode} />
+                    </div>
+                    <div
+                      className={
+                        mobileDetailMode
+                          ? "shrink-0 border-t border-ableton-border bg-ableton-pane px-4 py-3"
+                          : undefined
+                      }
+                    >
+                      {showDispositionFlow && !dispositionModeForSelected ? (
+                        <DispositionChooser
+                          suggestedQueue={selected.obligationQueue ?? "action"}
+                          onChoose={handleChooseDisposition}
+                        />
+                      ) : null}
+                      {showDispositionFlow && dispositionModeForSelected === "action" ? (
+                        <FolderBins
+                          folders={folders}
+                          filing={filing}
+                          onFile={(folderId) => void fileToFolder(selected.gmailId, folderId)}
+                          onArchive={() => void finishDisposition(selected.gmailId, "archive")}
+                        />
+                      ) : null}
+                      {showDispositionFlow && dispositionModeForSelected === "respond" ? (
+                        <RespondPanel
+                          messageId={selected.gmailId}
+                          sending={sendingQuickReply}
+                          onQuickReply={(template) => void handleQuickReply(template)}
+                          onArchiveAfterReply={() => void finishDisposition(selected.gmailId, "archive")}
+                        />
+                      ) : null}
+                      {!triageEnabled && !viewingFolderId ? (
+                        <FileToFolder
+                          folders={folders}
+                          selectedFolderId={fileTargetFolderId}
+                          onFolderSelect={setFileTargetFolderId}
+                          onFile={() => void fileToFolder(selected.gmailId, fileTargetFolderId)}
+                          canFile={canFileSelected}
+                          filing={filing}
+                          required={false}
+                        />
+                      ) : null}
+                      <div className="flex flex-wrap gap-2">
+                        {!triageEnabled && activeMailbox !== "DRAFT" && activeMailbox !== "SENT" ? (
+                          <>
+                            <a className="ableton-btn" href={`/compose?mode=reply&id=${selected.gmailId}`}>
+                              Reply
+                            </a>
+                            <a className="ableton-btn" href={`/compose?mode=forward&id=${selected.gmailId}`}>
+                              Forward
+                            </a>
+                          </>
+                        ) : null}
+                        {activeMailbox === "DRAFT" ? (
+                          <a className="ableton-btn ableton-btn-primary" href={`/compose?id=${selected.gmailId}`}>
+                            Edit draft
+                          </a>
+                        ) : null}
+                        {!triageEnabled ? (
+                          visibleMailboxActions.map((action) => (
+                            <button
+                              key={action}
+                              className={`ableton-btn ${action === "delete_forever" ? "border-red-800 text-red-300" : ""}`}
+                              onClick={() => applyAction(action, selected.gmailId)}
+                            >
+                              {ACTION_LABELS[action]}
+                            </button>
+                          ))
+                        ) : (
+                          <TriageSafetyActions
+                            onTrash={() => applyAction("trash", selected.gmailId)}
+                            onSpam={() => applyAction("spam", selected.gmailId)}
+                          />
+                        )}
+                        {triageEnabled && showDispositionFlow && !dispositionModeForSelected && isMdUp ? (
+                          <p className="w-full text-xs text-ableton-muted">Choose Respond, Action, or FYI to continue.</p>
+                        ) : null}
+                        {triageEnabled && lockedMessageCount > 0 && isMdUp ? (
+                          <p className="w-full text-xs text-ableton-muted">
+                            {lockedMessageCount} cell{lockedMessageCount === 1 ? "" : "s"} locked in the grid.
+                          </p>
+                        ) : null}
+                      </div>
+                    </div>
+                    {isMdUp ? (
+                      <WeekInboxDigest
+                        groups={weekGroups}
+                        selectedWeekKey={selectedWeekGroup?.key ?? null}
+                        onJumpToWeek={jumpToWeek}
+                      />
+                    ) : null}
+                  </>
+                )}
+              </div>
             )
           ) : (
             <>
@@ -1071,8 +1148,9 @@ export function InboxClient() {
           )
         }
       />
+      </div>
         ) : null}
       </main>
-    </>
+    </div>
   );
 }

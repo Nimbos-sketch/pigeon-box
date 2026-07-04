@@ -136,24 +136,26 @@ export function AiOverview({ selectedFilter, onFilterChange, onSelectMessage }: 
   return (
     <div>
       <div className="border-b border-ableton-border">
-        <div className="flex items-center justify-between gap-2 px-3 py-2">
-          <p className="text-[10px] uppercase tracking-[0.14em] text-ableton-muted">Summary filters</p>
-          <OverviewFilterPicker enabledFilterIds={enabledFilterIds} onToggle={handleToggleFilter} />
-        </div>
-        <div className="flex flex-wrap gap-2 px-3 pb-3">
-          {visibleFilters.map((filter) => {
-            const isActive = filter.id === selectedFilter;
-            return (
-              <button
-                key={filter.id}
-                type="button"
-                onClick={() => onFilterChange(filter.id)}
-                className={`ableton-chip ${isActive ? "ableton-chip-active" : ""}`}
-              >
-                {filter.label}
-              </button>
-            );
-          })}
+        <div className="flex items-center gap-2 px-3 py-2">
+          <p className="shrink-0 text-[10px] uppercase tracking-[0.14em] text-ableton-muted">Summary filters</p>
+          <div className="flex min-w-0 flex-1 items-center gap-2 overflow-x-auto pb-0.5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            {visibleFilters.map((filter) => {
+              const isActive = filter.id === selectedFilter;
+              return (
+                <button
+                  key={filter.id}
+                  type="button"
+                  onClick={() => onFilterChange(filter.id)}
+                  className={`ableton-chip shrink-0 whitespace-nowrap ${isActive ? "ableton-chip-active" : ""}`}
+                >
+                  {filter.label}
+                </button>
+              );
+            })}
+          </div>
+          <div className="shrink-0">
+            <OverviewFilterPicker enabledFilterIds={enabledFilterIds} onToggle={handleToggleFilter} />
+          </div>
         </div>
         <div className="border-t border-ableton-border px-3 py-2 text-xs text-ableton-muted">{activeFilter.description}</div>
       </div>

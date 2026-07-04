@@ -1,6 +1,8 @@
 import { z } from "zod";
 import { auth } from "@/lib/auth";
-import { deleteMessage, getMessageById, modifyMessage } from "@/server/gmail/service";
+import { db } from "@/lib/db";
+import { deleteMessage, modifyMessage } from "@/server/gmail/service";
+import { getPrimaryGmailAccount } from "@/server/gmail/client";
 import { recordSenderAction, type SenderRuleView } from "@/server/sender-rules/service";
 import { fail, handleApiError, ok } from "@/server/http";
 
@@ -52,8 +54,13 @@ export async function POST(request: Request, { params }: Params) {
 
     let senderRule: SenderRuleView | null = null;
     if (parsed.action === "spam" || parsed.action === "trash" || parsed.action === "archive") {
-      const message = await getMessageById(session.user.id, id);
-      senderRule = await recordSenderAction(session.user.id, message.fromAddress, parsed.action);
+      const { prismaAccountId } = await getPrimaryGmailAccount(session.user.id);
+      const message = await db.gmailMessage.findUnique({
+        where: { accountId_gmailId: { accountId: prismaAccountId, gmailId: id } }
+      });
+      if (message?.fromAddress) {
+        senderRule = await recordSenderAction(session.user.id, message.fromAddress, parsed.action);
+      }
     }
 
     return ok({ result, senderRule });

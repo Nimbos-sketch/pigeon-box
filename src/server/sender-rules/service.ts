@@ -1,4 +1,5 @@
 import { db } from "@/lib/db";
+import { mapWithConcurrency } from "@/lib/async-pool";
 import { extractSenderKey, formatSenderKeyLabel } from "@/lib/sender-key";
 import { createGmailClient } from "@/server/gmail/client";
 import { fileMessageToFolder } from "@/server/gmail/folders";
@@ -176,33 +177,39 @@ async function applyRuleToMessage(
 
 export async function applyAutoSenderRules<T extends { gmailId: string; fromAddress: string | null }>(
   userId: string,
-  messages: T[]
+  messages: T[],
+  rulesMap?: Map<string, SenderRuleView>
 ): Promise<{ remaining: T[]; autoHandled: AutoHandledSummary[] }> {
-  const rulesMap = await getSenderRulesMap(userId);
+  const map = rulesMap ?? (await getSenderRulesMap(userId));
   const autoHandled: AutoHandledSummary[] = [];
   const remaining: T[] = [];
+  const toAutoApply: { message: T; rule: SenderRuleView }[] = [];
 
   for (const message of messages) {
     const senderKey = extractSenderKey(message.fromAddress);
-    const rule = senderKey ? rulesMap.get(senderKey) : undefined;
+    const rule = senderKey ? map.get(senderKey) : undefined;
 
     if (rule?.autoApply) {
-      try {
-        await applyRuleToMessage(userId, message.gmailId, rule);
-        autoHandled.push({
-          messageId: message.gmailId,
-          senderKey: rule.senderKey,
-          senderLabel: rule.senderLabel,
-          action: rule.preferredAction,
-          folderName: rule.folderName ?? undefined
-        });
-      } catch {
-        remaining.push(message);
-      }
+      toAutoApply.push({ message, rule });
     } else {
       remaining.push(message);
     }
   }
+
+  await mapWithConcurrency(toAutoApply, 4, async ({ message, rule }) => {
+    try {
+      await applyRuleToMessage(userId, message.gmailId, rule);
+      autoHandled.push({
+        messageId: message.gmailId,
+        senderKey: rule.senderKey,
+        senderLabel: rule.senderLabel,
+        action: rule.preferredAction,
+        folderName: rule.folderName ?? undefined
+      });
+    } catch {
+      remaining.push(message);
+    }
+  });
 
   return { remaining, autoHandled };
 }

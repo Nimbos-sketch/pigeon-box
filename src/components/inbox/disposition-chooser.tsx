@@ -4,9 +4,49 @@ import type { DispositionMode } from "@/lib/inbox-disposition";
 type DispositionChooserProps = {
   suggestedQueue: ObligationQueue;
   onChoose: (mode: DispositionMode) => void;
+  compact?: boolean;
 };
 
-export function DispositionChooser({ suggestedQueue, onChoose }: DispositionChooserProps) {
+export function DispositionChooser({ suggestedQueue, onChoose, compact = false }: DispositionChooserProps) {
+  if (compact) {
+    return (
+      <div className="border-2 border-ableton-orange bg-ableton-pane2 p-2.5">
+        <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-ableton-orange">
+          Choose disposition
+        </p>
+        <p className="mt-0.5 text-[10px] text-ableton-muted">
+          Suggested:{" "}
+          <span className={suggestedQueue === "response" ? "text-sky-300" : "text-ableton-lime"}>
+            {suggestedQueue === "response" ? "Respond" : "Action"}
+          </span>
+        </p>
+        <div className="mt-2 grid grid-cols-3 gap-1.5">
+          <button
+            type="button"
+            className="border border-sky-700/70 bg-sky-950/40 px-1.5 py-2.5 text-center"
+            onClick={() => onChoose("respond")}
+          >
+            <p className="text-[10px] font-semibold uppercase tracking-[0.1em] text-sky-300">Respond</p>
+          </button>
+          <button
+            type="button"
+            className="border border-ableton-lime/50 bg-ableton-pane px-1.5 py-2.5 text-center"
+            onClick={() => onChoose("action")}
+          >
+            <p className="text-[10px] font-semibold uppercase tracking-[0.1em] text-ableton-lime">Action</p>
+          </button>
+          <button
+            type="button"
+            className="border border-ableton-border bg-ableton-surface px-1.5 py-2.5 text-center"
+            onClick={() => onChoose("fyi")}
+          >
+            <p className="text-[10px] font-semibold uppercase tracking-[0.1em] text-ableton-muted">FYI</p>
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="mb-6 border-2 border-ableton-orange bg-ableton-pane2 p-4">
       <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-ableton-orange">

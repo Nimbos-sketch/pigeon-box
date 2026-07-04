@@ -11,6 +11,8 @@ type PigeonWorkspaceProps = {
   showWorkspaceOnMobile?: boolean;
   onBackToGrid?: () => void;
   workspaceTitle?: string;
+  /** Tighter mobile chrome when disposition panels should fill the screen. */
+  compactChrome?: boolean;
 };
 
 export function PigeonWorkspace({
@@ -19,14 +21,21 @@ export function PigeonWorkspace({
   hint,
   showWorkspaceOnMobile = false,
   onBackToGrid,
-  workspaceTitle
+  workspaceTitle,
+  compactChrome = false
 }: PigeonWorkspaceProps) {
   const isMdUp = useIsMdUp();
   const mobileDetail = !isMdUp && showWorkspaceOnMobile;
 
   return (
-    <div className="pigeon-board overflow-hidden">
-      <div className="ableton-panel-header flex flex-wrap items-center justify-between gap-2 border-b border-ableton-border">
+    <div
+      className={`overflow-hidden ${mobileDetail ? "flex min-h-0 flex-1 flex-col border-0" : "pigeon-board"}`}
+    >
+      <div
+        className={`ableton-panel-header flex flex-wrap items-center justify-between gap-2 border-b border-ableton-border ${
+          compactChrome ? "py-1" : ""
+        }`}
+      >
         {mobileDetail ? (
           <div className="flex min-w-0 flex-1 items-center gap-2">
             <button type="button" className="ableton-btn shrink-0 px-2 py-1 text-[10px]" onClick={onBackToGrid}>
@@ -47,7 +56,7 @@ export function PigeonWorkspace({
       </div>
 
       {mobileDetail ? (
-        <div className="pigeon-workspace-pane max-h-[min(72dvh,760px)] overflow-y-auto border-0 p-4">{workspace}</div>
+        <div className="pigeon-workspace-pane flex min-h-0 flex-1 flex-col overflow-hidden border-0 p-0">{workspace}</div>
       ) : (
         <div className="grid min-h-0 grid-cols-1 md:grid-cols-[minmax(0,2fr)_minmax(240px,1fr)] md:min-h-[420px] lg:min-h-[560px]">
           <div

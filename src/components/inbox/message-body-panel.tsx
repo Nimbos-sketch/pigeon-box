@@ -12,9 +12,11 @@ type MessageDetail = {
 type MessageBodyPanelProps = {
   messageId: string;
   fallbackSnippet: string | null;
+  /** Fill remaining flex space; body scrolls inside the panel. */
+  fill?: boolean;
 };
 
-export function MessageBodyPanel({ messageId, fallbackSnippet }: MessageBodyPanelProps) {
+export function MessageBodyPanel({ messageId, fallbackSnippet, fill = false }: MessageBodyPanelProps) {
   const [detail, setDetail] = useState<MessageDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -58,8 +60,12 @@ export function MessageBodyPanel({ messageId, fallbackSnippet }: MessageBodyPane
   const canShowFormatted = Boolean(bodyHtml);
 
   return (
-    <div className="mb-6 border border-ableton-border bg-ableton-pane">
-      <div className="flex items-center justify-between gap-2 border-b border-ableton-border bg-ableton-pane2 px-3 py-2">
+    <div
+      className={`border border-ableton-border bg-ableton-pane ${
+        fill ? "mb-0 flex min-h-0 flex-1 flex-col overflow-hidden" : "mb-6"
+      }`}
+    >
+      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-ableton-border bg-ableton-pane2 px-3 py-2">
         <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-ableton-muted">Message</p>
         {canShowFormatted ? (
           <button
@@ -72,7 +78,11 @@ export function MessageBodyPanel({ messageId, fallbackSnippet }: MessageBodyPane
         ) : null}
       </div>
 
-      <div className="max-h-[min(50vh,28rem)] overflow-y-auto p-4 text-sm leading-relaxed text-ableton-text">
+      <div
+        className={`overflow-y-auto p-4 text-sm leading-relaxed text-ableton-text ${
+          fill ? "min-h-0 flex-1" : "max-h-[min(50vh,28rem)]"
+        }`}
+      >
         {loading ? (
           <p className="text-ableton-muted">Loading full message...</p>
         ) : error ? (

@@ -276,6 +276,10 @@
     letter-spacing: 0.08em;
     color: var(--ableton-muted);
   }
+
+  body[data-inbox-response="true"] .mail-app-nav {
+    display: none;
+  }
 }
 
 @keyframes fadeIn {

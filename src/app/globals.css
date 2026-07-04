@@ -187,6 +187,7 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  /* 2 → 3 → 4 columns; JS padding uses getPigeonInboxGridColumns() with same widths */
   @media (min-width: 640px) {
     .pigeon-grid-inbox {
       grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -256,9 +257,17 @@
   }
 
   .pigeon-workspace-pane {
-    min-height: 20rem;
+    min-height: 16rem;
     background: var(--ableton-pane);
-    border-left: 1px solid var(--ableton-border);
+    border-top: 1px solid var(--ableton-border);
+  }
+
+  @media (min-width: 768px) {
+    .pigeon-workspace-pane {
+      min-height: 20rem;
+      border-top: none;
+      border-left: 1px solid var(--ableton-border);
+    }
   }
 
   .pigeon-slot-id {

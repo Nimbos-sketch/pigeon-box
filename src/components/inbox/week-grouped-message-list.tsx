@@ -3,6 +3,8 @@
 import type { ReactNode } from "react";
 import type { InboxWeekGroup } from "@/lib/inbox-week-groups";
 import type { ObligationQueue } from "@/lib/inbox-queues";
+import { padGridCells } from "@/lib/pigeon-grid";
+import { usePigeonInboxGridColumns } from "@/hooks/use-pigeon-inbox-grid-columns";
 import { WeekProgress } from "@/components/inbox/week-progress";
 
 type Message = InboxWeekGroup["messages"][number];
@@ -21,19 +23,6 @@ type WeekGroupedMessageListProps = {
   footer?: ReactNode;
 };
 
-const GRID_COLS = 4;
-
-function padGridCells<T>(items: T[], columns: number): (T | null)[] {
-  const padded: (T | null)[] = [...items];
-  const remainder = padded.length % columns;
-  if (remainder !== 0) {
-    for (let i = 0; i < columns - remainder; i++) {
-      padded.push(null);
-    }
-  }
-  return padded;
-}
-
 function slotId(weekIndex: number, messageIndex: number): string {
   return `${String.fromCharCode(65 + weekIndex)}${String(messageIndex + 1).padStart(2, "0")}`;
 }
@@ -51,6 +40,8 @@ export function WeekGroupedMessageList({
   weekSectionPrefix = "week-section",
   footer
 }: WeekGroupedMessageListProps) {
+  const gridColumns = usePigeonInboxGridColumns();
+
   return (
     <div className="pigeon-grid pigeon-grid-inbox">
       {groups.map((group, weekIndex) => {
@@ -99,7 +90,7 @@ export function WeekGroupedMessageList({
             </button>
 
             {isExpanded
-              ? padGridCells(group.messages, GRID_COLS).map((message, cellIndex) => {
+              ? padGridCells(group.messages, gridColumns).map((message, cellIndex) => {
                   if (!message) {
                     return <div key={`empty-${group.key}-${cellIndex}`} className="pigeon-cell pigeon-cell-empty" />;
                   }

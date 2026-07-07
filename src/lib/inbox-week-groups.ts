@@ -14,6 +14,8 @@ export type InboxMessageForGrouping = {
     preferredAction: string;
     actionsUntilAuto: number;
     autoApply: boolean;
+    folderId?: string | null;
+    folderName?: string | null;
   } | null;
 };
 

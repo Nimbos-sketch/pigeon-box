@@ -445,8 +445,8 @@ export function TeamPigeonHoles() {
           </button>
         </div>
       ) : (
-      <div className="grid min-h-[420px] grid-cols-1 lg:grid-cols-[minmax(0,2fr)_minmax(260px,1fr)]">
-        <div className="max-h-[520px] overflow-y-auto bg-ableton-border p-px">
+      <div className="grid min-h-0 grid-cols-1 md:grid-cols-[minmax(0,2fr)_minmax(240px,1fr)] md:min-h-[360px] lg:min-h-[420px]">
+        <div className="max-h-[min(52vh,520px)] overflow-y-auto bg-ableton-border p-px md:max-h-[520px]">
           {sections.map((section) => (
             <div key={section.key} className="mb-px">
               <div className="pigeon-cell pigeon-cell-week">
@@ -488,7 +488,7 @@ export function TeamPigeonHoles() {
           ))}
         </div>
 
-        <div className="border-l border-ableton-border bg-ableton-pane p-4">
+        <div className="pigeon-workspace-pane max-h-[min(52vh,520px)] overflow-y-auto p-4 md:max-h-[520px]">
           {!selectedHole ? (
             <p className="text-sm text-ableton-muted">Select a team cell</p>
           ) : loadingMessages ? (

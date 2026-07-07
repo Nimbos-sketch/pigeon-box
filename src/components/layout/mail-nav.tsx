@@ -16,7 +16,7 @@ export function MailNav() {
 
   return (
     <nav
-      className={`border-b px-4 py-2 ${
+      className={`mail-app-nav border-b px-4 py-2 ${
         onInbox ? "border-ableton-border/70 bg-ableton-pane2" : "border-ableton-border bg-ableton-surface"
       }`}
     >

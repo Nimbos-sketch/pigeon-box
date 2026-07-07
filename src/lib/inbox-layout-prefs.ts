@@ -28,7 +28,7 @@ export const MODULE_TAB_ORDER: InboxModuleId[] = [
 export const MODULE_LABELS: Record<InboxModuleId, string> = {
   overview: "Overview",
   transport: "Transport",
-  folders: "Folders",
+  folders: "Folders & rules",
   mailboxes: "Mailboxes",
   queue: "Queue",
   teamHoles: "Team holes",

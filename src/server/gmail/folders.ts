@@ -9,19 +9,22 @@ export type EmailFolderRecord = {
   gmailLabelId: string;
   color: string;
   createdAt: string;
+  ruleCount: number;
 };
 
 export async function listUserFolders(userId: string): Promise<EmailFolderRecord[]> {
   const folders = await db.emailFolder.findMany({
     where: { userId },
-    orderBy: { name: "asc" }
+    orderBy: { name: "asc" },
+    include: { _count: { select: { senderRules: true } } }
   });
   return folders.map((folder) => ({
     id: folder.id,
     name: folder.name,
     gmailLabelId: folder.gmailLabelId,
     color: normalizeFolderColor(folder.color),
-    createdAt: folder.createdAt.toISOString()
+    createdAt: folder.createdAt.toISOString(),
+    ruleCount: folder._count.senderRules
   }));
 }
 
@@ -39,7 +42,8 @@ export async function updateUserFolderColor(userId: string, folderId: string, co
     name: updated.name,
     gmailLabelId: updated.gmailLabelId,
     color: normalizeFolderColor(updated.color),
-    createdAt: updated.createdAt.toISOString()
+    createdAt: updated.createdAt.toISOString(),
+    ruleCount: 0
   };
 }
 
@@ -56,13 +60,14 @@ export async function createUserFolder(userId: string, name: string, color?: str
     where: { userId_name: { userId, name: trimmed } }
   });
   if (existing) {
-    return {
-      id: existing.id,
-      name: existing.name,
-      gmailLabelId: existing.gmailLabelId,
-      color: normalizeFolderColor(existing.color),
-      createdAt: existing.createdAt.toISOString()
-    };
+  return {
+    id: existing.id,
+    name: existing.name,
+    gmailLabelId: existing.gmailLabelId,
+    color: normalizeFolderColor(existing.color),
+    createdAt: existing.createdAt.toISOString(),
+    ruleCount: 0
+  };
   }
 
   const folderCount = await db.emailFolder.count({ where: { userId } });
@@ -107,8 +112,35 @@ export async function createUserFolder(userId: string, name: string, color?: str
     name: folder.name,
     gmailLabelId: folder.gmailLabelId,
     color: normalizeFolderColor(folder.color),
-    createdAt: folder.createdAt.toISOString()
+    createdAt: folder.createdAt.toISOString(),
+    ruleCount: 0
   };
+}
+
+export async function deleteUserFolder(userId: string, folderId: string): Promise<void> {
+  const folder = await db.emailFolder.findFirst({ where: { id: folderId, userId } });
+  if (!folder) {
+    throw new Error("Folder not found");
+  }
+
+  const { gmail, accountId } = await createGmailClient(userId);
+  try {
+    await gmail.users.labels.delete({ userId: "me", id: folder.gmailLabelId });
+  } catch {
+    // Label may already be gone in Gmail — still remove local records.
+  }
+
+  await db.gmailLabel.deleteMany({ where: { accountId, gmailId: folder.gmailLabelId } });
+  await db.emailFolder.delete({ where: { id: folderId } });
+
+  await db.auditLog.create({
+    data: {
+      accountId,
+      action: "FOLDER_DELETE",
+      targetId: folderId,
+      metaJson: JSON.stringify({ name: folder.name, gmailLabelId: folder.gmailLabelId })
+    }
+  });
 }
 
 export async function fileMessageToFolder(userId: string, messageId: string, folderId: string) {

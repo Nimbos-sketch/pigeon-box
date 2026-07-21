@@ -1,0 +1,16 @@
+# Copy to cloudflared/config.yml after setup (scripts/setup-named-tunnel.sh does this for you).
+#
+# Replace:
+#   TUNNEL_ID       — from: cloudflared tunnel list
+#   HOSTNAME        — your stable hostname, e.g. pigeon.yourdomain.com
+#   CREDENTIALS_FILE — path to JSON credentials from tunnel create
+
+tunnel: TUNNEL_ID
+credentials-file: CREDENTIALS_FILE
+
+ingress:
+  - hostname: HOSTNAME
+    service: http://127.0.0.1:3000
+    originRequest:
+      noTLSVerify: false
+  - service: http_status:404

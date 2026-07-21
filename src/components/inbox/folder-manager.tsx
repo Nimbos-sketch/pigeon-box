@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { FolderColorPicker } from "@/components/inbox/folder-color-picker";
+import { SenderRulesPanel } from "@/components/inbox/sender-rules-panel";
 import { DEFAULT_FOLDER_COLOR } from "@/lib/folder-colors";
 
 export type EmailFolder = {
@@ -9,6 +10,7 @@ export type EmailFolder = {
   name: string;
   gmailLabelId: string;
   color: string;
+  ruleCount?: number;
 };
 
 type FolderManagerProps = {
@@ -17,6 +19,8 @@ type FolderManagerProps = {
   onFolderViewChange: (folderId: string | null) => void;
   onFolderCreated: (folder: EmailFolder) => void;
   onFolderColorChange: (folderId: string, color: string) => void;
+  onFolderDeleted?: (folderId: string) => void;
+  onRulesChange?: () => void;
 };
 
 export function FolderManager({
@@ -24,11 +28,14 @@ export function FolderManager({
   selectedFolderId,
   onFolderViewChange,
   onFolderCreated,
-  onFolderColorChange
+  onFolderColorChange,
+  onFolderDeleted,
+  onRulesChange
 }: FolderManagerProps) {
   const [newFolderName, setNewFolderName] = useState("");
   const [newFolderColor, setNewFolderColor] = useState<string>(DEFAULT_FOLDER_COLOR);
   const [creating, setCreating] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const activeFolder = folders.find((folder) => folder.id === selectedFolderId) ?? null;
@@ -61,6 +68,31 @@ export function FolderManager({
     }
   }
 
+  async function handleDeleteFolder(folderId: string) {
+    const folder = folders.find((item) => item.id === folderId);
+    if (!folder) {
+      return;
+    }
+    if (!window.confirm(`Delete folder "${folder.name}"? Linked sender rules will lose their folder target.`)) {
+      return;
+    }
+
+    setDeletingId(folderId);
+    setError(null);
+    try {
+      const res = await fetch(`/api/folders/${folderId}`, { method: "DELETE" });
+      if (!res.ok) {
+        throw new Error("Could not delete folder");
+      }
+      onFolderDeleted?.(folderId);
+      onRulesChange?.();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to delete folder");
+    } finally {
+      setDeletingId(null);
+    }
+  }
+
   return (
     <div className="space-y-3 p-3">
       <div className="flex flex-wrap items-center gap-2">
@@ -80,8 +112,12 @@ export function FolderManager({
               onClick={() => onFolderViewChange(folder.id)}
               className={`ableton-chip border-l-[3px] ${isActive ? "ableton-chip-active" : ""}`}
               style={{ borderLeftColor: folder.color }}
+              title={folder.ruleCount ? `${folder.ruleCount} sender rule(s)` : undefined}
             >
               {folder.name}
+              {folder.ruleCount ? (
+                <span className="ml-1 font-mono text-[9px] text-ableton-muted">({folder.ruleCount})</span>
+              ) : null}
             </button>
           );
         })}
@@ -108,21 +144,31 @@ export function FolderManager({
 
       {activeFolder ? (
         <div className="flex flex-wrap items-center gap-2 border-t border-ableton-border pt-3">
-          <span className="text-[10px] uppercase tracking-[0.14em] text-ableton-muted">{activeFolder.name} colour</span>
+          <span className="text-[10px] uppercase tracking-[0.14em] text-ableton-muted">{activeFolder.name}</span>
           <FolderColorPicker
             compact
             value={activeFolder.color}
             onChange={(color) => onFolderColorChange(activeFolder.id, color)}
           />
+          <button
+            type="button"
+            className="ableton-btn border-red-800 px-2 py-1 text-[10px] text-red-300 disabled:opacity-60"
+            disabled={deletingId === activeFolder.id}
+            onClick={() => void handleDeleteFolder(activeFolder.id)}
+          >
+            {deletingId === activeFolder.id ? "Deleting..." : "Delete folder"}
+          </button>
         </div>
       ) : null}
 
       {error ? <p className="text-xs text-red-300">{error}</p> : null}
       {folders.length === 0 ? (
         <p className="text-xs text-ableton-muted">
-          Add colour-coded folders for action routing. Same-sender auto-handle kicks in after 3 identical actions.
+          Create colour-coded folders for filing. Sender rules learn from repeated actions.
         </p>
       ) : null}
+
+      <SenderRulesPanel folders={folders} onRulesChange={onRulesChange} />
     </div>
   );
 }

@@ -4,7 +4,10 @@ import { ThemeProvider } from "@/components/theme-provider";
 
 export const metadata: Metadata = {
   title: "Pigeon Box",
-  description: "Pigeon Box — your Gmail organization workspace"
+  description: "Pigeon Box — your Gmail organization workspace",
+  icons: {
+    icon: [{ url: "/logo.svg", type: "image/svg+xml" }]
+  }
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

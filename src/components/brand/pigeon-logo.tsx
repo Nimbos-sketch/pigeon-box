@@ -1,0 +1,27 @@
+type PigeonLogoProps = {
+  size?: number;
+  className?: string;
+};
+
+export function PigeonLogo({ size = 32, className = "" }: PigeonLogoProps) {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 128 128"
+      width={size}
+      height={size}
+      role="img"
+      aria-label="Pigeon Box"
+      className={`shrink-0 ${className}`}
+    >
+      <path fill="#2b2b2b" d="M8 88 L34 78 L28 104 Z" />
+      <path fill="#d9d9d9" d="M30 52 L108 36 L96 92 L24 98 Z" />
+      <path fill="#c4c4c4" d="M38 56 L98 44 L90 84 L32 88 Z" />
+      <path fill="#ededed" d="M46 58 L88 50 L82 78 L40 80 Z" />
+      <path fill="#3a3a3a" d="M58 34 L78 30 L74 52 L52 54 Z" />
+      <circle cx="86" cy="38" r="16" fill="#4a4a4a" />
+      <ellipse cx="90" cy="36" rx="3" ry="4" fill="#d0d0d0" />
+      <path fill="#ffffff" d="M98 36 L112 40 L98 44 Z" />
+    </svg>
+  );
+}

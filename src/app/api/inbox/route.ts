@@ -46,7 +46,7 @@ export async function GET(request: Request) {
     try {
       rulesMap = await getSenderRulesMap(session.user.id);
       if (shouldAutoHandleInbox(labelId, query)) {
-        const autoResult = await applyAutoSenderRules(session.user.id, sourceMessages);
+        const autoResult = await applyAutoSenderRules(session.user.id, sourceMessages, rulesMap);
         sourceMessages = autoResult.remaining;
         autoHandled = autoResult.autoHandled;
       }

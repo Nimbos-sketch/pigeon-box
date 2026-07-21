@@ -187,6 +187,7 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  /* 2 → 3 → 4 columns; JS padding uses getPigeonInboxGridColumns() with same widths */
   @media (min-width: 640px) {
     .pigeon-grid-inbox {
       grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -256,9 +257,17 @@
   }
 
   .pigeon-workspace-pane {
-    min-height: 20rem;
+    min-height: 16rem;
     background: var(--ableton-pane);
-    border-left: 1px solid var(--ableton-border);
+    border-top: 1px solid var(--ableton-border);
+  }
+
+  @media (min-width: 768px) {
+    .pigeon-workspace-pane {
+      min-height: 20rem;
+      border-top: none;
+      border-left: 1px solid var(--ableton-border);
+    }
   }
 
   .pigeon-slot-id {
@@ -266,6 +275,44 @@
     font-size: 9px;
     letter-spacing: 0.08em;
     color: var(--ableton-muted);
+  }
+
+  body[data-inbox-response="true"] .mail-app-nav {
+    display: none;
+  }
+
+  body[data-inbox-mobile-detail="true"] .mail-app-nav {
+    display: none;
+  }
+
+  body[data-inbox-email-fullscreen="true"] .ableton-topbar {
+    display: none;
+  }
+
+  .mobile-message-scroll {
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-y: auto;
+    touch-action: pan-y;
+    overflow-anchor: auto;
+  }
+
+  .email-formatted-body {
+    overflow: visible;
+    word-break: break-word;
+  }
+
+  .email-formatted-body img {
+    max-width: 100%;
+    height: auto;
+  }
+
+  .email-formatted-body table {
+    max-width: 100%;
+  }
+
+  .email-formatted-body a {
+    color: #c45a2c;
+    text-decoration: underline;
   }
 }
 

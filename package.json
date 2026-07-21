@@ -10,7 +10,11 @@
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "test:e2e": "playwright test",
-    "test:e2e:ui": "playwright test --ui"
+    "test:e2e:ui": "playwright test --ui",
+    "tunnel:setup": "bash scripts/setup-named-tunnel.sh",
+    "tunnel:run": "bash scripts/run-named-tunnel.sh",
+    "tunnel:quick": "bash scripts/run-quick-tunnel.sh",
+    "tunnel:ngrok": "bash scripts/run-ngrok-tunnel.sh"
   },
   "dependencies": {
     "@auth/prisma-adapter": "^2.7.4",

@@ -51,6 +51,8 @@ export const authConfig: NextAuthConfig = {
   adapter: PrismaAdapter(db),
   secret: env.authSecret,
   trustHost: true,
+  // Quick tunnels use HTTPS but mobile Safari often drops __Secure- prefixed OAuth cookies in dev.
+  useSecureCookies: env.isProduction,
   debug: env.authDebug,
   session: { strategy: "jwt", maxAge: 30 * 24 * 60 * 60 },
   providers: [
